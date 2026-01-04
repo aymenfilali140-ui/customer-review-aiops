@@ -8,6 +8,8 @@ from apps.api.app.routes.enriched_reviews import router as enriched_reviews_rout
 from apps.api.app.routes.metrics import router as metrics_router
 from apps.api.app.routes.metrics_trend import router as metrics_trend_router
 from apps.api.app.routes.metrics_aspects import router as metrics_aspects_router
+from apps.api.app.routes.ops import router as ops_router
+
 
 app = FastAPI(title="Customer Review AIOps API")
 
@@ -40,3 +42,4 @@ app.include_router(enriched_reviews_router)
 app.include_router(metrics_router)
 app.include_router(metrics_trend_router)
 app.include_router(metrics_aspects_router)
+app.include_router(ops_router)

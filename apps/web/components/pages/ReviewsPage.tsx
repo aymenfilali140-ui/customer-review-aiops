@@ -2,7 +2,7 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import { getReviews, getVerticalsConfig } from "../../lib/api";
-import { Card, SectionTitle, Select, Button } from "../ui";
+import { Card, SectionTitle, Button, Select, th, td } from "../ui";
 
 type ReviewsResp = {
   count: number;
@@ -10,31 +10,65 @@ type ReviewsResp = {
   items: Array<{
     id: string;
     raw_id: string;
+    source: string;
+    source_review_id: string;
     vertical: string;
     created_at: string;
     analyzed_at: string;
     overall_sentiment: string;
     aspects_json: any;
+    stakeholder_flags_json?: any;
+    model_version?: string;
+    prompt_version?: string;
   }>;
 };
 
+function buildCsvUrl(base: string, params: Record<string, any>) {
+  const u = new URL("/reviews/enriched", base);
+  Object.entries(params).forEach(([k, v]) => {
+    if (v === undefined || v === null || v === "") return;
+    u.searchParams.set(k, String(v));
+  });
+  u.searchParams.set("export", "csv");
+  return u.toString();
+}
+
+async function downloadCsv(url: string, filename: string) {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`CSV export failed (${res.status})`);
+  const blob = await res.blob();
+  const href = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = href;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(href);
+}
+
 export default function ReviewsPage() {
-  const [days, setDays] = useState<number>(30);
+  const [days, setDays] = useState<number>(0);
   const [vertical, setVertical] = useState<string>("groceries");
   const [verticalOptions, setVerticalOptions] = useState<string[]>(["groceries"]);
 
-  const [stakeholder, setStakeholder] = useState<string>("");
-  const [aspect, setAspect] = useState<string>("");
-  const [sentiment, setSentiment] = useState<string>(""); // optional; backend may ignore
+  // NEW filters
+  const [q, setQ] = useState<string>("");
+  const [sentiment, setSentiment] = useState<string>(""); // "", Positive, Neutral, Negative
 
-  const [limit, setLimit] = useState<number>(25);
+  // existing drilldowns (keep available on Reviews page too)
+  const [aspectFilter, setAspectFilter] = useState<string>("");
+  const [stakeholderFilter, setStakeholderFilter] = useState<string>("");
+
+  // pagination
+  const [limit, setLimit] = useState<number>(50);
   const [offset, setOffset] = useState<number>(0);
 
   const [data, setData] = useState<ReviewsResp | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
   const [err, setErr] = useState<string>("");
 
-  // Load vertical options from config
+  // Load vertical options
   useEffect(() => {
     (async () => {
       try {
@@ -50,12 +84,12 @@ export default function ReviewsPage() {
     })();
   }, []);
 
-  // Reset pagination when major filters change
+  // Reset pagination when main filters change
   useEffect(() => {
     setOffset(0);
-  }, [vertical, days, stakeholder, aspect, sentiment, limit]);
+  }, [vertical, days, q, sentiment, aspectFilter, stakeholderFilter, limit]);
 
-  // Fetch reviews
+  // Fetch
   useEffect(() => {
     if (!vertical) return;
 
@@ -65,9 +99,10 @@ export default function ReviewsPage() {
       try {
         const r = await getReviews(vertical, limit, offset, {
           days,
-          stakeholder: stakeholder || undefined,
-          aspect: aspect || undefined,
+          q: q || undefined,
           sentiment: sentiment || undefined,
+          aspect: aspectFilter || undefined,
+          stakeholder: stakeholderFilter || undefined,
         });
         setData(r);
       } catch (e: any) {
@@ -76,210 +111,280 @@ export default function ReviewsPage() {
         setLoading(false);
       }
     })();
-  }, [vertical, days, stakeholder, aspect, sentiment, limit, offset]);
+  }, [vertical, days, q, sentiment, aspectFilter, stakeholderFilter, limit, offset]);
 
-  const items = useMemo(() => {
-    const base = data?.items ?? [];
-    // If backend doesn't support sentiment filtering yet, keep UI useful by filtering client-side too.
-    if (!sentiment) return base;
-    return base.filter((r) => r.overall_sentiment === sentiment);
-  }, [data, sentiment]);
-
-  const totalCount = data?.count ?? 0;
-  const pageFrom = totalCount ? offset + 1 : 0;
-  const pageTo = Math.min(offset + limit, totalCount);
-
+  const total = data?.count ?? 0;
   const canPrev = offset > 0;
-  const canNext = offset + limit < totalCount;
+  const canNext = offset + limit < total;
+
+  const apiBase = process.env.NEXT_PUBLIC_API_BASE ?? "http://127.0.0.1:8000";
+
+  const onExport = async () => {
+    try {
+      const url = buildCsvUrl(apiBase, {
+        vertical,
+        days,
+        q: q || undefined,
+        sentiment: sentiment || undefined,
+        aspect: aspectFilter || undefined,
+        stakeholder: stakeholderFilter || undefined,
+        export_limit: 5000,
+      });
+      const fname = `reviews_${vertical}_${days === 0 ? "all" : `${days}d`}.csv`;
+      await downloadCsv(url, fname);
+    } catch (e: any) {
+      setErr(e?.message ?? String(e));
+    }
+  };
 
   const clearFilters = () => {
-    setStakeholder("");
-    setAspect("");
+    setQ("");
     setSentiment("");
+    setAspectFilter("");
+    setStakeholderFilter("");
+    setDays(0);
+    setOffset(0);
   };
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-      <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
+      {/* Header + controls */}
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", alignItems: "flex-end" }}>
         <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
           <div style={{ fontSize: 22, fontWeight: 900, letterSpacing: -0.2 }}>Reviews</div>
           <div style={{ fontSize: 12, color: "var(--muted)" }}>
-            Browse enriched reviews with filters and pagination.
+            Search raw text + enriched insights. Export the filtered set as CSV when needed.
           </div>
         </div>
 
-        <Card>
-          <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
-            <Select
-              label="Vertical"
-              value={vertical}
-              onChange={(v) => setVertical(v)}
-              options={verticalOptions.map((v) => ({ label: v, value: v }))}
-            />
-            <Select
-              label="Window"
-              value={String(days)}
-              onChange={(v) => setDays(Number(v))}
-              options={[
-                { label: "All time", value: 0 },
-                { label: "Last 7 days", value: 7 },
-                { label: "Last 30 days", value: 30 },
-                { label: "Last 90 days", value: 90 },
-                { label: "Last 365 days", value: 365 },
-              ]}
-            />
-            <Select
-              label="Sentiment"
-              value={sentiment}
-              onChange={(v) => setSentiment(v)}
-              options={[
-                { label: "All", value: "" },
-                { label: "Negative", value: "Negative" },
-                { label: "Positive", value: "Positive" },
-                { label: "Neutral", value: "Neutral" },
-              ]}
-            />
-            <Select
-              label="Page size"
-              value={String(limit)}
-              onChange={(v) => setLimit(Number(v))}
-              options={[
-                { label: "25", value: 25 },
-                { label: "50", value: 50 },
-                { label: "100", value: 100 },
-              ]}
-            />
-
-            {loading ? <span style={{ fontSize: 12, color: "var(--muted)" }}>Loading…</span> : null}
-            {err ? <span style={{ fontSize: 12, color: "var(--brand-red)", fontWeight: 800 }}>{err}</span> : null}
-          </div>
-        </Card>
+        <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+          <Button variant="secondary" onClick={onExport}>
+            Export CSV
+          </Button>
+          <Button variant="ghost" onClick={clearFilters}>
+            Reset
+          </Button>
+        </div>
       </div>
 
+      {/* Controls card */}
       <Card>
-        <SectionTitle title="Filters" subtitle="(Optional) Type filters; we can upgrade to dropdowns once we have config-driven lists." />
-        <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
-          <label style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: 12, color: "var(--muted)" }}>
-            Stakeholder
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 12 }}>
+          <Select
+            label="Vertical"
+            value={vertical}
+            onChange={(v) => setVertical(v)}
+            options={verticalOptions.map((v) => ({ label: v, value: v }))}
+          />
+
+          <Select
+            label="Window"
+            value={String(days)}
+            onChange={(v) => setDays(Number(v))}
+            options={[0, 7, 30, 90, 365].map((d) => ({
+              label: d === 0 ? "All time" : `Last ${d} days`,
+              value: d,
+            }))}
+          />
+
+          <Select
+            label="Sentiment"
+            value={sentiment}
+            onChange={(v) => setSentiment(v)}
+            options={[
+              { label: "All", value: "" },
+              { label: "Positive", value: "Positive" },
+              { label: "Neutral", value: "Neutral" },
+              { label: "Negative", value: "Negative" },
+            ]}
+          />
+
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            <div style={{ fontSize: 12, fontWeight: 900, color: "var(--muted)" }}>Search</div>
             <input
-              value={stakeholder}
-              onChange={(e) => setStakeholder(e.target.value)}
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="Search raw text + enriched JSON (summary/evidence)…"
+              style={{
+                height: 38,
+                borderRadius: 12,
+                border: "1px solid rgba(0,0,0,0.10)",
+                padding: "0 12px",
+                outline: "none",
+                fontWeight: 700,
+                background: "rgba(255,255,255,0.9)",
+              }}
+            />
+          </div>
+        </div>
+
+        <div style={{ height: 10 }} />
+
+        {/* Optional drilldowns kept here (small / subtle) */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 12, alignItems: "end" }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            <div style={{ fontSize: 12, fontWeight: 900, color: "var(--muted)" }}>Aspect</div>
+            <input
+              value={aspectFilter}
+              onChange={(e) => setAspectFilter(e.target.value)}
+              placeholder="e.g. refund_handling"
+              style={{
+                height: 38,
+                borderRadius: 12,
+                border: "1px solid rgba(0,0,0,0.10)",
+                padding: "0 12px",
+                outline: "none",
+                fontWeight: 700,
+                background: "rgba(255,255,255,0.9)",
+              }}
+            />
+          </div>
+
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            <div style={{ fontSize: 12, fontWeight: 900, color: "var(--muted)" }}>Stakeholder</div>
+            <input
+              value={stakeholderFilter}
+              onChange={(e) => setStakeholderFilter(e.target.value)}
               placeholder="e.g. operations"
-              style={inputStyle}
+              style={{
+                height: 38,
+                borderRadius: 12,
+                border: "1px solid rgba(0,0,0,0.10)",
+                padding: "0 12px",
+                outline: "none",
+                fontWeight: 700,
+                background: "rgba(255,255,255,0.9)",
+              }}
             />
-          </label>
+          </div>
 
-          <label style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: 12, color: "var(--muted)" }}>
-            Aspect
-            <input
-              value={aspect}
-              onChange={(e) => setAspect(e.target.value)}
-              placeholder="e.g. app_experience"
-              style={inputStyle}
-            />
-          </label>
+          <Select
+            label="Page size"
+            value={String(limit)}
+            onChange={(v) => setLimit(Number(v))}
+            options={[25, 50, 100, 200].map((n) => ({ label: `${n}`, value: n }))}
+          />
 
-          <Button variant="secondary" onClick={clearFilters} disabled={!stakeholder && !aspect && !sentiment}>
-            Clear filters
-          </Button>
-
-          <div style={{ marginLeft: "auto", fontSize: 12, color: "var(--muted)", fontWeight: 800 }}>
-            Showing {pageFrom}–{pageTo} of {totalCount}
+          <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, alignItems: "center" }}>
+            {loading ? <span style={{ fontSize: 12, color: "var(--muted)", fontWeight: 900 }}>Loading…</span> : null}
+            {err ? <span style={{ fontSize: 12, color: "var(--brand-red)", fontWeight: 900 }}>{err}</span> : null}
           </div>
         </div>
       </Card>
 
+      {/* Results */}
       <Card>
-        <SectionTitle title="Review feed" subtitle="Expand a row to see extracted aspects and evidence." />
+        <SectionTitle
+          title={`Results (${total})`}
+          subtitle="Click a row to expand extracted aspects and evidence."
+        />
 
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 10 }}>
-          <Button variant="secondary" onClick={() => setOffset((o) => Math.max(0, o - limit))} disabled={!canPrev}>
-            Previous
-          </Button>
-          <Button variant="secondary" onClick={() => setOffset((o) => o + limit)} disabled={!canNext}>
-            Next
-          </Button>
+        <div style={{ height: 8 }} />
+
+        {/* Pagination */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+          <div style={{ fontSize: 12, color: "var(--muted)", fontWeight: 800 }}>
+            Showing {total ? Math.min(offset + 1, total) : 0}–{Math.min(offset + limit, total)} of {total}
+          </div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <Button variant="secondary" onClick={() => setOffset((o) => Math.max(0, o - limit))} disabled={!canPrev}>
+              Prev
+            </Button>
+            <Button variant="secondary" onClick={() => setOffset((o) => o + limit)} disabled={!canNext}>
+              Next
+            </Button>
+          </div>
         </div>
 
-        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          {items.map((r) => (
-            <ReviewCard key={r.id} r={r} />
-          ))}
+        <div style={{ height: 10 }} />
 
-          {!loading && items.length === 0 ? (
-            <div style={{ fontSize: 12, color: "var(--muted)" }}>No reviews match the current filters.</div>
-          ) : null}
+        {/* Table */}
+        <div style={{ overflowX: "auto" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse" }}>
+            <thead>
+              <tr>
+                <th style={th}>Sentiment</th>
+                <th style={th}>Created</th>
+                <th style={th}>Summary</th>
+                <th style={th}>Aspects</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(data?.items ?? []).map((r) => {
+                const summary = r.aspects_json?.overall_summary ?? "";
+                const mentioned = r.aspects_json?.mentioned_aspects ?? [];
+                return (
+                  <tr key={r.id}>
+                    <td style={td}>
+                      <span style={{ fontWeight: 900 }}>{r.overall_sentiment}</span>
+                    </td>
+                    <td style={td}>
+                      <span style={{ color: "var(--muted)", fontSize: 12 }}>
+                        {new Date(r.created_at).toLocaleString()}
+                      </span>
+                    </td>
+                    <td style={td}>
+                      <details>
+                        <summary style={{ cursor: "pointer", fontWeight: 800 }}>
+                          {summary ? summary : "(No summary)"}
+                        </summary>
+                        <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 8 }}>
+                          {mentioned.length ? (
+                            mentioned.map((m: any, idx: number) => (
+                              <div
+                                key={idx}
+                                style={{
+                                  border: "1px solid rgba(0,0,0,0.08)",
+                                  borderRadius: 14,
+                                  padding: 10,
+                                  background: "var(--surface)",
+                                }}
+                              >
+                                <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                                  <span style={{ fontWeight: 900 }}>{m.aspect}</span>
+                                  <span style={{ fontSize: 12, color: "var(--muted)" }}>{m.stakeholder}</span>
+                                  <span
+                                    style={{
+                                      fontSize: 12,
+                                      fontWeight: 900,
+                                      color:
+                                        m.sentiment === "Negative"
+                                          ? "var(--brand-red)"
+                                          : m.sentiment === "Positive"
+                                          ? "var(--ok)"
+                                          : "var(--muted)",
+                                    }}
+                                  >
+                                    {m.sentiment}
+                                  </span>
+                                </div>
+                                <div style={{ marginTop: 6, color: "#333", fontSize: 13 }}>
+                                  “{m.evidence}”
+                                </div>
+                              </div>
+                            ))
+                          ) : (
+                            <div style={{ fontSize: 12, color: "var(--muted)" }}>No aspects extracted.</div>
+                          )}
+                        </div>
+                      </details>
+                    </td>
+                    <td style={td}>{mentioned.length}</td>
+                  </tr>
+                );
+              })}
+
+              {data && data.items.length === 0 ? (
+                <tr>
+                  <td style={td} colSpan={4}>
+                    <span style={{ fontSize: 12, color: "var(--muted)" }}>No results for the current filters.</span>
+                  </td>
+                </tr>
+              ) : null}
+            </tbody>
+          </table>
         </div>
       </Card>
     </div>
   );
 }
-
-function ReviewCard({ r }: { r: ReviewsResp["items"][0] }) {
-  const summaryText = r.aspects_json?.overall_summary ?? "";
-  const mentioned = r.aspects_json?.mentioned_aspects ?? [];
-  const badge = sentimentBadge(r.overall_sentiment);
-
-  return (
-    <details style={{ border: "1px solid var(--border)", borderRadius: "var(--r-lg)", padding: 12, background: "rgba(255,255,255,0.9)" }}>
-      <summary style={{ cursor: "pointer", listStyle: "none" as any, display: "flex", alignItems: "center", gap: 10 }}>
-        <span
-          style={{
-            display: "inline-flex",
-            alignItems: "center",
-            borderRadius: 999,
-            padding: "4px 10px",
-            fontWeight: 900,
-            fontSize: 12,
-            border: "1px solid rgba(0,0,0,0.08)",
-            background: badge.bg,
-            color: badge.fg,
-          }}
-        >
-          {r.overall_sentiment}
-        </span>
-
-        <span style={{ color: "var(--muted)", fontSize: 12 }}>{new Date(r.created_at).toLocaleString()}</span>
-        <span style={{ fontWeight: 800, fontSize: 13, flex: 1 }}>{summaryText || "(No summary)"}</span>
-      </summary>
-
-      <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 10 }}>
-        {mentioned.length ? (
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {mentioned.map((m: any, idx: number) => (
-              <div key={idx} style={{ border: "1px solid rgba(0,0,0,0.08)", borderRadius: 14, padding: 10, background: "var(--surface)" }}>
-                <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-                  <span style={{ fontWeight: 900 }}>{m.aspect}</span>
-                  <span style={{ fontSize: 12, color: "var(--muted)" }}>{m.stakeholder}</span>
-                  <span style={{ fontSize: 12, fontWeight: 900, color: m.sentiment === "Negative" ? "var(--brand-red)" : m.sentiment === "Positive" ? "var(--ok)" : "var(--muted)" }}>
-                    {m.sentiment}
-                  </span>
-                </div>
-                <div style={{ marginTop: 6, color: "#333", fontSize: 13 }}>“{m.evidence}”</div>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div style={{ fontSize: 12, color: "var(--muted)" }}>No aspects extracted.</div>
-        )}
-      </div>
-    </details>
-  );
-}
-
-function sentimentBadge(sentiment: string) {
-  if (sentiment === "Negative") return { bg: "var(--neg-bg)", fg: "var(--neg)" };
-  if (sentiment === "Positive") return { bg: "var(--ok-bg)", fg: "var(--ok)" };
-  return { bg: "var(--neu-bg)", fg: "var(--neu)" };
-}
-
-const inputStyle: React.CSSProperties = {
-  height: 38,
-  padding: "0 12px",
-  borderRadius: 999,
-  border: "1px solid var(--border)",
-  background: "rgba(255,255,255,0.9)",
-  outline: "none",
-  fontSize: 13,
-  minWidth: 220,
-};
