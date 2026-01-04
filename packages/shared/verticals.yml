@@ -1,0 +1,119 @@
+global_aspects:
+  - timeliness
+  - order_completeness
+  - driver_behavior
+  - customer_support
+  - refund_handling
+  - app_experience
+
+stakeholders_catalog:
+  operations: {}
+  product: {}
+  commercial: {}
+  marketing: {}
+  finance: {}
+  customer_support: {}
+
+global_stakeholders:
+  operations: [timeliness, order_completeness, driver_behavior]
+  customer_support: [customer_support, refund_handling]
+  product: [app_experience]
+
+verticals:
+  food:
+    display_name: "Food"
+    aspects:
+      - food_quality
+      - food_temperature
+      - packaging_spillage
+      - preparation_time
+      - order_customization_accuracy
+    stakeholders:
+      operations: [timeliness, order_completeness, driver_behavior]
+      product: [app_experience, order_customization_accuracy]
+      commercial: [food_quality]
+      customer_support: [customer_support, refund_handling]
+
+  groceries:
+    display_name: "Groceries"
+    aspects:
+      - item_freshness
+      - substitutions
+      - missing_items
+      - expiry_issues
+      - produce_quality
+      - packing_quality
+    stakeholders:
+      operations: [timeliness, order_completeness, driver_behavior]
+      commercial: [substitutions, item_freshness]
+      product: [app_experience, packing_quality]
+      customer_support: [customer_support, refund_handling, missing_items]
+
+  market:
+    display_name: "Market"
+    aspects:
+      - product_quality
+      - wrong_item
+      - damaged_item
+      - authenticity_concern
+      - price_value
+      - packaging_quality
+    stakeholders:
+      operations: [timeliness, order_completeness, driver_behavior]
+      commercial: [price_value, product_quality, authenticity_concern]
+      product: [app_experience]
+      customer_support: [customer_support, refund_handling, wrong_item, damaged_item]
+
+  snoonu_laundry:
+    display_name: "SLaundry"
+    aspects:
+      - cleaning_quality
+      - item_damage
+      - item_missing
+      - stain_removal
+      - turnaround_time
+      - packaging_quality
+    stakeholders:
+      operations: [timeliness, order_completeness, driver_behavior, turnaround_time]
+      product: [app_experience, cleaning_quality, stain_removal]
+      customer_support: [customer_support, refund_handling, item_damage, item_missing]
+
+  snoonu_city:
+    display_name: "SCity"
+    aspects:
+      - ticket_delivery
+      - validity_issues
+      - event_information_accuracy
+      - redemption_experience
+      - cancellation_policy
+    stakeholders:
+      operations: [timeliness]
+      commercial: [cancellation_policy, validity_issues]
+      product: [app_experience, redemption_experience, event_information_accuracy]
+      customer_support: [customer_support, refund_handling]
+
+  snoonu_send:
+    display_name: "Snoosend"
+    aspects:
+      - pickup_accuracy
+      - dropoff_accuracy
+      - instructions_followed
+      - item_handling_damage
+      - communication
+    stakeholders:
+      operations: [timeliness, driver_behavior, pickup_accuracy, dropoff_accuracy, instructions_followed]
+      product: [app_experience, communication]
+      customer_support: [customer_support, refund_handling, item_handling_damage]
+
+  car_services:
+    display_name: "My Car"
+    aspects:
+      - appointment_timing
+      - service_quality
+      - pricing_transparency
+      - staff_behavior
+    stakeholders:
+      operations: [appointment_timing]
+      commercial: [pricing_transparency]
+      product: [app_experience]
+      customer_support: [customer_support, refund_handling]

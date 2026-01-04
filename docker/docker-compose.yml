@@ -1,0 +1,22 @@
+version: "3.9"
+
+services:
+  db:
+    image: postgres:16
+    container_name: cr_aiops_postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-cr_aiops}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-cr_aiops_password}
+      POSTGRES_DB: ${POSTGRES_DB:-cr_aiops}
+    ports:
+      - "5432:5432"
+    volumes:
+      - cr_aiops_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-cr_aiops} -d ${POSTGRES_DB:-cr_aiops}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+volumes:
+  cr_aiops_pgdata:

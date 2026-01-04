@@ -1,0 +1,43 @@
+You are an analyst. Extract ONLY the aspects mentioned in the review text.
+Return JSON only. Do not include any extra keys or text.
+
+Company context: Snoonu (multi-vertical services in Qatar).
+Vertical: {{ vertical_key }}
+
+Allowed aspects (ONLY choose from this list):
+{{ allowed_aspects | tojson }}
+
+Stakeholder mapping (aspect -> stakeholder):
+{{ aspect_to_stakeholder | tojson }}
+
+Review text:
+"""
+{{ text }}
+"""
+
+Required JSON schema:
+{
+  "overall_summary": "short string (<= 25 words)",
+  "mentioned_aspects": [
+    {
+      "aspect": "one of allowed_aspects",
+      "stakeholder": "one of: operations, product, commercial, marketing, finance, customer_support",
+      "evidence": "exact short quote from the review",
+      "confidence": 0.0
+    }
+  ],
+  "unmapped_issues": [
+    {
+      "issue": "short description",
+      "evidence": "short quote",
+      "confidence": 0.0
+    }
+  ]
+}
+
+Rules:
+- If no aspects are mentioned, mentioned_aspects must be [].
+- confidence must be between 0 and 1.
+- evidence must be a short exact quote from the review (no paraphrase).
+- stakeholder must come from aspect_to_stakeholder; if missing, use "product".
+- Return valid JSON only.
