@@ -50,3 +50,42 @@ export function getReviews(
 export function getVerticalsConfig() {
   return getJSON(`/config/verticals`);
 }
+
+export async function runPipeline(params?: {
+  vertical?: string;
+  pages?: number;
+  count?: number;
+  batch?: number;
+}) {
+  const res = await fetch(`${API_BASE}/pipeline/run`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(params ?? {}),
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json() as Promise<{ job_id: string }>;
+}
+
+export async function getPipelineJob(jobId: string) {
+  const res = await fetch(`${API_BASE}/pipeline/jobs/${jobId}`);
+  if (!res.ok) throw new Error(await res.text());
+  return res.json() as Promise<{
+    id: string;
+    state: "queued" | "running" | "succeeded" | "failed";
+    created_at: string;
+    started_at?: string | null;
+    finished_at?: string | null;
+    return_code?: number | null;
+    error?: string | null;
+    log_tail: string;
+  }>;
+}
+export async function getAspectOptions(vertical: string, days: number) {
+  const base = process.env.NEXT_PUBLIC_API_BASE ?? "http://127.0.0.1:8000";
+  const url = new URL(`${base}/options/aspects`);
+  url.searchParams.set("vertical", vertical);
+  url.searchParams.set("days", String(days));
+  const r = await fetch(url.toString());
+  if (!r.ok) throw new Error(`getAspectOptions failed: ${r.status}`);
+  return r.json();
+}

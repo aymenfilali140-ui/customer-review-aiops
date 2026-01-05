@@ -3,6 +3,12 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { getReviews, getVerticalsConfig } from "../../lib/api";
 import { Card, SectionTitle, Button, Select, th, td } from "../ui";
+import { getAspectOptions } from "../../lib/api";
+
+type AspectOptionsResp = {
+  filters: { vertical: string | null; days: number };
+  items: Array<{ aspect: string; count: number }>;
+};
 
 type ReviewsResp = {
   count: number;
@@ -68,6 +74,18 @@ export default function ReviewsPage() {
   const [loading, setLoading] = useState<boolean>(false);
   const [err, setErr] = useState<string>("");
 
+  const [aspectOptions, setAspectOptions] = useState<Array<{ aspect: string; count: number }>>([]);
+
+  useEffect(() => {
+  (async () => {
+    try {
+      const res: AspectOptionsResp = await getAspectOptions(vertical, days);
+      setAspectOptions(res.items ?? []);
+    } catch {
+      setAspectOptions([]);
+    }
+  })();
+}, [vertical, days]);
   // Load vertical options
   useEffect(() => {
     (async () => {
@@ -222,23 +240,33 @@ export default function ReviewsPage() {
 
         {/* Optional drilldowns kept here (small / subtle) */}
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 12, alignItems: "end" }}>
-          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-            <div style={{ fontSize: 12, fontWeight: 900, color: "var(--muted)" }}>Aspect</div>
-            <input
+          <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            <span style={{ fontSize: 12, color: "var(--muted)", fontWeight: 800 }}>Aspect</span>
+            <select
               value={aspectFilter}
               onChange={(e) => setAspectFilter(e.target.value)}
-              placeholder="e.g. refund_handling"
               style={{
-                height: 38,
-                borderRadius: 12,
-                border: "1px solid rgba(0,0,0,0.10)",
-                padding: "0 12px",
-                outline: "none",
-                fontWeight: 700,
+                height: 36,
+                padding: "0 10px",
+                borderRadius: 10,
+                border: "1px solid var(--border)",
                 background: "rgba(255,255,255,0.9)",
+                fontWeight: 800,
+                fontSize: 12,
+                outline: "none",
+                cursor: "pointer",
+                minWidth: 220,
               }}
-            />
-          </div>
+            >
+              <option value="">All aspects</option>
+              {aspectOptions.map((a) => (
+                <option key={a.aspect} value={a.aspect}>
+                  {a.aspect} ({a.count})
+                </option>
+              ))}
+            </select>
+          </label>
+
 
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
             <div style={{ fontSize: 12, fontWeight: 900, color: "var(--muted)" }}>Stakeholder</div>
