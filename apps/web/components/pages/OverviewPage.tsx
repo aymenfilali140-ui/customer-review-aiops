@@ -293,7 +293,7 @@ export default function OverviewPage() {
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "1.35fr 1fr",
+            gridTemplateColumns: "minmax(0, 1.65fr) minmax(0, 1fr)",
             gap: 12,
             alignItems: "stretch",
           }}
@@ -380,20 +380,24 @@ export default function OverviewPage() {
             </div>
           </div>
 
-          {/* RIGHT: snapshot + stakeholder negatives (stretches to bottom) */}
-          <div style={{ height: 560, minHeight: 0, display: "flex" }}>
-            <Card>
-              <div style={{ height: "100%", display: "flex", flexDirection: "column", minHeight: 0 }}>
+          <div
+            style={{
+              height: 580,
+              display: "flex",
+              width: "100%",
+              minWidth: 0,
+              justifySelf: "stretch",
+            }}
+          >
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <Card>
                 <SectionTitle title="Snapshot" subtitle="Distribution + stakeholder negatives for this window." />
                 <MiniDonut total={total} positive={posCount} neutral={neuCount} negative={negCount} />
 
                 <div style={{ height: 12 }} />
                 <div style={{ borderTop: "1px solid rgba(0,0,0,0.06)", paddingTop: 12 }}>
                   <SectionTitle title="Stakeholder negatives" subtitle="Click to drill down the review feed." />
-                </div>
 
-                {/* Scrollable stakeholder table so card can always reach the bottom */}
-                <div style={{ flex: "1 1 auto", minHeight: 0, overflowY: "auto", scrollbarGutter: "stable" }}>
                   <div style={{ overflowX: "auto" }}>
                     <table style={{ width: "100%", borderCollapse: "collapse" }}>
                       <thead>
@@ -425,8 +429,8 @@ export default function OverviewPage() {
                     </table>
                   </div>
                 </div>
-              </div>
-            </Card>
+              </Card>
+            </div>
           </div>
         </div>
       </Card>
@@ -814,6 +818,13 @@ function LegendRow({ label, value, color }: { label: string; value: number; colo
 
 /** Chart: totals vs negative (simple, brand-aligned) */
 function TrendChart({ series }: { series: Array<{ day: string; total: number; negative: number }> }) {
+  const [hover, setHover] = React.useState<null | {
+    i: number;
+    x: number;
+    y: number;
+    kind: "total" | "negative";
+  }>(null);
+
   if (!series.length) return <div style={{ fontSize: 12, color: "var(--muted)" }}>No chart data.</div>;
   if (series.length === 1) {
     return (
@@ -823,19 +834,54 @@ function TrendChart({ series }: { series: Array<{ day: string; total: number; ne
     );
   }
 
+  // --- sizing ---
   const width = 980;
-  const height = 220; // taller chart to improve the ratio
-  const pad = 18;
+  const height = 380; // taller for readability
+  const padL = 52; // left padding for y-axis labels
+  const padR = 18;
+  const padT = 18;
+  const padB = 42; // bottom padding for x-axis labels
 
   const maxY = Math.max(...series.map((s) => Math.max(s.total, s.negative)), 1);
 
-  const x = (i: number) => pad + (i * (width - 2 * pad)) / (series.length - 1);
-  const y = (v: number) => height - pad - (v * (height - 2 * pad)) / maxY;
+  const x = (i: number) => padL + (i * (width - padL - padR)) / (series.length - 1);
+  const y = (v: number) => height - padB - (v * (height - padT - padB)) / maxY;
 
   const pathFor = (key: "total" | "negative") =>
     series
       .map((s, i) => `${i === 0 ? "M" : "L"} ${x(i).toFixed(1)} ${y(s[key]).toFixed(1)}`)
       .join(" ");
+
+  // nice y ticks (5 lines)
+  const yTicks = 5;
+  const ticks = Array.from({ length: yTicks }, (_, k) => {
+    const t = (k / (yTicks - 1)) * maxY;
+    return Math.round(t);
+  }).reverse(); // top to bottom labels
+
+  // show fewer x labels (avoid clutter)
+  const maxXLabels = 6;
+  const step = Math.max(1, Math.ceil(series.length / maxXLabels));
+  const xLabelIdx = new Set<number>();
+  for (let i = 0; i < series.length; i += step) xLabelIdx.add(i);
+  xLabelIdx.add(0);
+  xLabelIdx.add(series.length - 1);
+
+  const fmtX = (s: string) => {
+    // ISO date-like? show YYYY-MM-DD
+    if (s.length >= 10 && s[4] === "-" && s[7] === "-") return s.slice(0, 10);
+    return s;
+  };
+
+  // Tooltip: display in top-right corner inside the chart container
+  const tooltip = hover
+    ? {
+        day: fmtX(series[hover.i].day),
+        total: series[hover.i].total,
+        negative: series[hover.i].negative,
+        kind: hover.kind,
+      }
+    : null;
 
   return (
     <div
@@ -844,23 +890,154 @@ function TrendChart({ series }: { series: Array<{ day: string; total: number; ne
         borderRadius: "var(--r-lg)",
         padding: 10,
         background: "var(--surface)",
+        position: "relative",
       }}
+      onMouseLeave={() => setHover(null)}
     >
-      <svg width="100%" viewBox={`0 0 ${width} ${height}`}>
-        <line x1={pad} y1={height - pad} x2={width - pad} y2={height - pad} stroke="rgba(0,0,0,0.08)" />
+      {tooltip ? (
+        <div
+          style={{
+            position: "absolute",
+            top: 10,
+            right: 10,
+            zIndex: 2,
+            border: "1px solid rgba(0,0,0,0.10)",
+            background: "rgba(255,255,255,0.92)",
+            borderRadius: 12,
+            padding: "8px 10px",
+            minWidth: 180,
+            boxShadow: "0 6px 18px rgba(0,0,0,0.08)",
+          }}
+        >
+          <div style={{ fontSize: 12, color: "var(--muted)", fontWeight: 900 }}>{tooltip.day}</div>
+          <div style={{ marginTop: 6, display: "flex", justifyContent: "space-between", gap: 10 }}>
+            <span style={{ fontSize: 12, fontWeight: 900, color: "rgba(0,0,0,0.70)" }}>Total</span>
+            <span style={{ fontSize: 12, fontWeight: 900 }}>{tooltip.total}</span>
+          </div>
+          <div style={{ marginTop: 4, display: "flex", justifyContent: "space-between", gap: 10 }}>
+            <span style={{ fontSize: 12, fontWeight: 900, color: "var(--brand-red)" }}>Negative</span>
+            <span style={{ fontSize: 12, fontWeight: 900, color: "var(--brand-red)" }}>{tooltip.negative}</span>
+          </div>
+          <div style={{ marginTop: 6, fontSize: 11, color: "var(--muted)" }}>
+            Hovering: <strong>{tooltip.kind}</strong>
+          </div>
+        </div>
+      ) : null}
+
+      <svg width="100%" viewBox={`0 0 ${width} ${height}`} style={{ display: "block" }}>
+        {/* grid + y ticks */}
+        {ticks.map((tv, idx) => {
+          const yy = y(tv);
+          return (
+            <g key={idx}>
+              <line
+                x1={padL}
+                y1={yy}
+                x2={width - padR}
+                y2={yy}
+                stroke="rgba(0,0,0,0.06)"
+              />
+              <text
+                x={padL - 10}
+                y={yy + 4}
+                textAnchor="end"
+                fontSize="11"
+                fill="rgba(0,0,0,0.55)"
+                fontWeight="700"
+              >
+                {tv}
+              </text>
+            </g>
+          );
+        })}
+
+        {/* axes */}
+        <line x1={padL} y1={padT} x2={padL} y2={height - padB} stroke="rgba(0,0,0,0.12)" />
+        <line x1={padL} y1={height - padB} x2={width - padR} y2={height - padB} stroke="rgba(0,0,0,0.12)" />
+
+        {/* lines */}
         <path d={pathFor("total")} fill="none" stroke="rgba(0,0,0,0.55)" strokeWidth="2.5" />
         <path d={pathFor("negative")} fill="none" stroke="var(--brand-red)" strokeWidth="2.5" strokeDasharray="5 4" />
 
-        <text x={pad} y={pad} fontSize="12" fill="rgba(0,0,0,0.60)" fontWeight="800">
-          Total
-        </text>
-        <text x={pad + 52} y={pad} fontSize="12" fill="var(--brand-red)" fontWeight="900">
-          Negative
-        </text>
+        {/* x labels */}
+        {series.map((s, i) => {
+          if (!xLabelIdx.has(i)) return null;
+          return (
+            <text
+              key={s.day}
+              x={x(i)}
+              y={height - 18}
+              textAnchor="middle"
+              fontSize="10"
+              fill="rgba(0,0,0,0.55)"
+              fontWeight="700"
+            >
+              {fmtX(s.day)}
+            </text>
+          );
+        })}
+
+        {/* hover points */}
+        {series.map((s, i) => {
+          const xt = x(i);
+          const yt = y(s.total);
+          const yn = y(s.negative);
+
+          return (
+            <g key={s.day}>
+              {/* total point */}
+              <circle
+                cx={xt}
+                cy={yt}
+                r={6}
+                fill="transparent"
+                style={{ cursor: "pointer" }}
+                onMouseEnter={() => setHover({ i, x: xt, y: yt, kind: "total" })}
+              />
+              <circle
+                cx={xt}
+                cy={yt}
+                r={hover?.i === i && hover.kind === "total" ? 4 : 2.5}
+                fill="rgba(0,0,0,0.55)"
+                opacity={hover?.i === i && hover.kind === "total" ? 1 : 0.8}
+                pointerEvents="none"
+              />
+
+              {/* negative point */}
+              <circle
+                cx={xt}
+                cy={yn}
+                r={6}
+                fill="transparent"
+                style={{ cursor: "pointer" }}
+                onMouseEnter={() => setHover({ i, x: xt, y: yn, kind: "negative" })}
+              />
+              <circle
+                cx={xt}
+                cy={yn}
+                r={hover?.i === i && hover.kind === "negative" ? 4 : 2.5}
+                fill="var(--brand-red)"
+                opacity={hover?.i === i && hover.kind === "negative" ? 1 : 0.85}
+                pointerEvents="none"
+              />
+            </g>
+          );
+        })}
+
+        {/* legend */}
+        <g>
+          <text x={padL} y={padT} fontSize="12" fill="rgba(0,0,0,0.60)" fontWeight="800">
+            Total
+          </text>
+          <text x={padL + 52} y={padT} fontSize="12" fill="var(--brand-red)" fontWeight="900">
+            Negative
+          </text>
+        </g>
       </svg>
     </div>
   );
 }
+
 
 function Skeleton({ h = 12, w = "100%" }: { h?: number; w?: number | string }) {
   return (
