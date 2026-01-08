@@ -140,19 +140,49 @@ export default function OverviewPage() {
   const matrix = useMemo(() => {
     if (!aspects) return { stakeholders: [], aspects: [], cell: new Map<string, number>() };
 
-    const topAspects = aspects.aspect_totals.slice(0, 8).map((x) => x.aspect);
-    const stakeholders = Array.from(new Set(aspects.items.map((i) => i.stakeholder).filter(Boolean))).sort();
+    // 1) Only negative rows
+    const negItems = aspects.items.filter((i) => i.sentiment === "Negative" && i.stakeholder && i.aspect);
 
+    // 2) Build totals by stakeholder and by aspect (negative only)
+    const stakeholderNegTotals = new Map<string, number>();
+    const aspectNegTotals = new Map<string, number>();
+
+    // 3) Build cell counts
     const cell = new Map<string, number>();
-    for (const it of aspects.items) {
-      if (it.sentiment !== "Negative") continue;
-      if (!topAspects.includes(it.aspect)) continue;
-      const key = `${it.stakeholder}||${it.aspect}`;
-      cell.set(key, (cell.get(key) ?? 0) + it.count);
+
+    for (const it of negItems) {
+      const s = it.stakeholder;
+      const a = it.aspect;
+      const n = it.count ?? 0;
+
+      stakeholderNegTotals.set(s, (stakeholderNegTotals.get(s) ?? 0) + n);
+      aspectNegTotals.set(a, (aspectNegTotals.get(a) ?? 0) + n);
+
+      const key = `${s}||${a}`;
+      cell.set(key, (cell.get(key) ?? 0) + n);
     }
 
-    return { stakeholders, aspects: topAspects, cell };
+    // 4) Sort stakeholders by most negative signals (desc)
+    const stakeholders = Array.from(stakeholderNegTotals.entries())
+      .sort((x, y) => y[1] - x[1])
+      .map(([name]) => name);
+
+    // 5) Sort aspects by most negative signals (desc)
+    const aspectsSorted = Array.from(aspectNegTotals.entries())
+      .sort((x, y) => y[1] - x[1])
+      .map(([name]) => name);
+
+    // 6) Optional: cap to keep the table readable
+    const MAX_ROWS = 10;
+    const MAX_COLS = 10;
+
+    return {
+      stakeholders: stakeholders.slice(0, MAX_ROWS),
+      aspects: aspectsSorted.slice(0, MAX_COLS),
+      cell,
+    };
   }, [aspects]);
+
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
