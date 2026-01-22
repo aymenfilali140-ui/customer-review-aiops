@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { getAspects, getReviews, getSummary, getTrend, getVerticalsConfig } from "../../lib/api";
 import { Card, SectionTitle, Button, Select, Stat, th, td } from "../ui";
 
@@ -55,6 +55,9 @@ export default function OverviewPage() {
   const [loading, setLoading] = useState<boolean>(false);
   const [err, setErr] = useState<string>("");
   const [bucket, setBucket] = useState<"day" | "week" | "month">("week");
+
+  // Reviews left block tabs (aspects vs stakeholders)
+  const [reviewsLeftTab, setReviewsLeftTab] = useState<"aspects" | "stakeholders">("aspects");
 
   // Load vertical options from config (fallback is groceries)
   useEffect(() => {
@@ -124,8 +127,6 @@ export default function OverviewPage() {
   const posCount = summary?.sentiment_distribution?.Positive ?? 0;
   const neuCount = summary?.sentiment_distribution?.Neutral ?? 0;
 
-  const negPct = total ? Math.round((negCount / total) * 100) : 0;
-
   const topNegAspect = summary?.top_negative_aspects?.[0]?.aspect ?? "-";
   const topNegStakeholder = summary?.stakeholder_negative_counts?.[0]?.stakeholder ?? "-";
 
@@ -135,54 +136,6 @@ export default function OverviewPage() {
     setAspectFilter("");
     setStakeholderFilter("");
   };
-
-  // Build a stakeholder x aspect matrix (negative counts only)
-  const matrix = useMemo(() => {
-    if (!aspects) return { stakeholders: [], aspects: [], cell: new Map<string, number>() };
-
-    // 1) Only negative rows
-    const negItems = aspects.items.filter((i) => i.sentiment === "Negative" && i.stakeholder && i.aspect);
-
-    // 2) Build totals by stakeholder and by aspect (negative only)
-    const stakeholderNegTotals = new Map<string, number>();
-    const aspectNegTotals = new Map<string, number>();
-
-    // 3) Build cell counts
-    const cell = new Map<string, number>();
-
-    for (const it of negItems) {
-      const s = it.stakeholder;
-      const a = it.aspect;
-      const n = it.count ?? 0;
-
-      stakeholderNegTotals.set(s, (stakeholderNegTotals.get(s) ?? 0) + n);
-      aspectNegTotals.set(a, (aspectNegTotals.get(a) ?? 0) + n);
-
-      const key = `${s}||${a}`;
-      cell.set(key, (cell.get(key) ?? 0) + n);
-    }
-
-    // 4) Sort stakeholders by most negative signals (desc)
-    const stakeholders = Array.from(stakeholderNegTotals.entries())
-      .sort((x, y) => y[1] - x[1])
-      .map(([name]) => name);
-
-    // 5) Sort aspects by most negative signals (desc)
-    const aspectsSorted = Array.from(aspectNegTotals.entries())
-      .sort((x, y) => y[1] - x[1])
-      .map(([name]) => name);
-
-    // 6) Optional: cap to keep the table readable
-    const MAX_ROWS = 10;
-    const MAX_COLS = 10;
-
-    return {
-      stakeholders: stakeholders.slice(0, MAX_ROWS),
-      aspects: aspectsSorted.slice(0, MAX_COLS),
-      cell,
-    };
-  }, [aspects]);
-
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
@@ -230,29 +183,36 @@ export default function OverviewPage() {
         </Card>
       </div>
 
-      {/* KPI cards */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(200px, 1fr))", gap: 12 }}>
+      {/* KPI row (Snapshot replaces Total + Negative KPIs) */}
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(4, minmax(200px, 1fr))",
+          gap: 12,
+          alignItems: "stretch",
+        }}
+      >
+        {/* Snapshot spans the space of two KPI blocks */}
+        <div style={{ gridColumn: "span 2" }}>
+          <Card>
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              <SectionTitle title="Snapshot" subtitle="Hover a segment to see its percentage." />
+              <InteractiveDonut total={total} positive={posCount} neutral={neuCount} negative={negCount} />
+            </div>
+          </Card>
+        </div>
+
+        <Stat title="Top Negative Aspect" value={topNegAspect} hint="Click an aspect below to drill down to examples." />
+
         <Stat
-          title="Total reviews"
-          value={String(total)}
-          hint={`Positive ${posCount} · Neutral ${neuCount} · Negative ${negCount}`}
-        />
-        <Stat
-          title="Negative reviews"
-          value={`${negCount} (${negPct}%)`}
-          hint="Counts are based on enriched reviews in the selected window."
-        />
-        <Stat title="Top negative aspect" value={topNegAspect} hint="Click an aspect below to drill down to examples." />
-        <Stat
-          title="Top stakeholder (neg)"
+          title="Top Negative Stakeholder"
           value={topNegStakeholder}
           hint="Click a stakeholder below to filter the review feed."
         />
       </div>
 
-      {/* Trend + Snapshot (fixed height + scrollable table; snapshot stretches to bottom) */}
+      {/* Trend (full-width; snapshot removed from here) */}
       <Card>
-        {/* Header row: title on left, subtle grouping on right */}
         <div
           style={{
             display: "flex",
@@ -266,229 +226,100 @@ export default function OverviewPage() {
 
           <div style={{ display: "inline-flex", alignItems: "center", gap: 10 }}>
             <span style={{ fontSize: 12, color: "var(--muted)", fontWeight: 800 }}>Grouping</span>
-            <select
+            <SegmentTabs
               value={bucket}
-              onChange={(e) => setBucket(e.target.value as any)}
-              style={{
-                height: 34,
-                padding: "0 10px",
-                borderRadius: 999,
-                border: "1px solid rgba(0,0,0,0.10)",
-                background: "rgba(255,255,255,0.85)",
-                fontWeight: 900,
-                fontSize: 12,
-                outline: "none",
-                cursor: "pointer",
-              }}
-            >
-              <option value="day">Daily</option>
-              <option value="week">Weekly</option>
-              <option value="month">Monthly</option>
-            </select>
+              onChange={setBucket}
+              options={[
+                //{value: "day", label: "Daily"},
+                {value: "week", label: "Weekly"},
+                {value: "month", label: "Monthly"},
+              ]}
+            />
           </div>
         </div>
-
         <div style={{ height: 8 }} />
 
         <div
           style={{
-            display: "grid",
-            gridTemplateColumns: "minmax(0, 1.65fr) minmax(0, 1fr)",
-            gap: 12,
-            alignItems: "stretch",
+            height: 560, // fixed block height for all buckets
+            display: "flex",
+            flexDirection: "column",
+            gap: 10,
+            minHeight: 0,
           }}
         >
-          {/* LEFT: trend chart + scrollable table inside a fixed-height column */}
+          <TrendChart series={trend?.series ?? []} />
+
           <div
             style={{
-              height: 560, // fixed block height for all buckets
-              display: "flex",
-              flexDirection: "column",
-              gap: 10,
+              flex: "1 1 auto",
               minHeight: 0,
+              overflowY: "scroll",
+              scrollbarGutter: "stable",
+              border: "1px solid rgba(0,0,0,0.06)",
+              borderRadius: "var(--r-lg)",
+              background: "rgba(255,255,255,0.9)",
             }}
           >
-            {/* Taller chart */}
-            <TrendChart series={trend?.series ?? []} />
-
-            {/* Scroll container for the table */}
-            <div
-              style={{
-                flex: "1 1 auto",
-                minHeight: 0,
-                overflowY: "scroll",
-                scrollbarGutter: "stable",
-                border: "1px solid rgba(0,0,0,0.06)",
-                borderRadius: "var(--r-lg)",
-                background: "rgba(255,255,255,0.9)",
-              }}
-            >
-              <div style={{ height: "100%", overflowX: "auto" }}>
-                {trend?.series?.length ? (
-                  <table style={{ width: "100%", borderCollapse: "collapse" }}>
-                    <thead>
-                      <tr>
-                        <th
-                          style={{
-                            ...th,
-                            position: "sticky",
-                            top: 0,
-                            background: "var(--surface)",
-                            zIndex: 1,
-                          }}
-                        >
-                          Day
-                        </th>
-                        <th
-                          style={{
-                            ...th,
-                            position: "sticky",
-                            top: 0,
-                            background: "var(--surface)",
-                            zIndex: 1,
-                          }}
-                        >
-                          Total
-                        </th>
-                        <th
-                          style={{
-                            ...th,
-                            position: "sticky",
-                            top: 0,
-                            background: "var(--surface)",
-                            zIndex: 1,
-                          }}
-                        >
-                          Negative
-                        </th>
+            <div style={{ height: "100%", overflowX: "auto" }}>
+              {trend?.series?.length ? (
+                <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                  <thead>
+                    <tr>
+                      <th
+                        style={{
+                          ...th,
+                          position: "sticky",
+                          top: 0,
+                          background: "var(--surface)",
+                          zIndex: 1,
+                        }}
+                      >
+                        Day
+                      </th>
+                      <th
+                        style={{
+                          ...th,
+                          position: "sticky",
+                          top: 0,
+                          background: "var(--surface)",
+                          zIndex: 1,
+                        }}
+                      >
+                        Total
+                      </th>
+                      <th
+                        style={{
+                          ...th,
+                          position: "sticky",
+                          top: 0,
+                          background: "var(--surface)",
+                          zIndex: 1,
+                        }}
+                      >
+                        Negative
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {trend.series.map((row) => (
+                      <tr key={row.day}>
+                        <td style={td}>{row.day}</td>
+                        <td style={td}>{row.total}</td>
+                        <td style={td}>{row.negative}</td>
                       </tr>
-                    </thead>
-                    <tbody>
-                      {trend.series.map((row) => (
-                        <tr key={row.day}>
-                          <td style={td}>{row.day}</td>
-                          <td style={td}>{row.total}</td>
-                          <td style={td}>{row.negative}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                ) : (
-                  <div style={{ padding: 12, fontSize: 12, color: "var(--muted)" }}>No trend data.</div>
-                )}
-              </div>
-            </div>
-          </div>
-
-          <div
-            style={{
-              height: 580,
-              display: "flex",
-              width: "100%",
-              minWidth: 0,
-              justifySelf: "stretch",
-            }}
-          >
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <Card>
-                <SectionTitle title="Snapshot" subtitle="Distribution + stakeholder negatives for this window." />
-                <MiniDonut total={total} positive={posCount} neutral={neuCount} negative={negCount} />
-
-                <div style={{ height: 12 }} />
-                <div style={{ borderTop: "1px solid rgba(0,0,0,0.06)", paddingTop: 12 }}>
-                  <SectionTitle title="Stakeholder negatives" subtitle="Click to drill down the review feed." />
-
-                  <div style={{ overflowX: "auto" }}>
-                    <table style={{ width: "100%", borderCollapse: "collapse" }}>
-                      <thead>
-                        <tr>
-                          <th style={th}>Stakeholder</th>
-                          <th style={th}>Count</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {(summary?.stakeholder_negative_counts ?? []).map((s) => (
-                          <tr
-                            key={s.stakeholder}
-                            onClick={() => setStakeholderFilter(s.stakeholder)}
-                            className={`row-click ${stakeholderFilter === s.stakeholder ? "row-selected" : ""}`}
-                            title="Click to filter review feed"
-                          >
-                            <td style={{ ...td, fontWeight: 800 }}>{s.stakeholder}</td>
-                            <td style={td}>{s.count}</td>
-                          </tr>
-                        ))}
-                        {!(summary?.stakeholder_negative_counts ?? []).length ? (
-                          <tr>
-                            <td style={td} colSpan={2}>
-                              <span style={{ fontSize: 12, color: "var(--muted)" }}>No stakeholder data.</span>
-                            </td>
-                          </tr>
-                        ) : null}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              </Card>
+                    ))}
+                  </tbody>
+                </table>
+              ) : (
+                <div style={{ padding: 12, fontSize: 12, color: "var(--muted)" }}>No trend data.</div>
+              )}
             </div>
           </div>
         </div>
       </Card>
 
-      {/* Matrix */}
-      <Card>
-        <SectionTitle title="Negative signals matrix" subtitle="Stakeholder × aspect (negative counts, top aspects only)." />
-        <div style={{ overflowX: "auto" }}>
-          {matrix.stakeholders.length && matrix.aspects.length ? (
-            <table style={{ width: "100%", borderCollapse: "collapse" }}>
-              <thead>
-                <tr>
-                  <th style={th}>Stakeholder</th>
-                  {matrix.aspects.map((a) => (
-                    <th key={a} style={th}>
-                      {a}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {matrix.stakeholders.map((s) => (
-                  <tr key={s}>
-                    <td style={{ ...td, fontWeight: 900 }}>{s}</td>
-                    {matrix.aspects.map((a) => {
-                      const key = `${s}||${a}`;
-                      const v = matrix.cell.get(key) ?? 0;
-                      return (
-                        <td key={a} style={td}>
-                          <span
-                            style={{
-                              display: "inline-flex",
-                              minWidth: 28,
-                              justifyContent: "center",
-                              borderRadius: 999,
-                              padding: "2px 8px",
-                              border: "1px solid rgba(0,0,0,0.08)",
-                              background: v > 0 ? "rgba(217,2,23,0.08)" : "rgba(0,0,0,0.03)",
-                              color: v > 0 ? "var(--brand-red)" : "var(--muted)",
-                              fontWeight: 900,
-                            }}
-                          >
-                            {v}
-                          </span>
-                        </td>
-                      );
-                    })}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          ) : (
-            <div style={{ fontSize: 12, color: "var(--muted)" }}>No aspect matrix data.</div>
-          )}
-        </div>
-      </Card>
-
-      {/* Reviews (fixed height + scrollable aspects table and review feed). Bar chart removed; KPI added. */}
+      {/* Reviews (negative stakeholders moved into the left block as a tab) */}
       <Card>
         <div
           style={{
@@ -522,15 +353,32 @@ export default function OverviewPage() {
             minHeight: 0,
           }}
         >
-          {/* LEFT: KPI + aspects table (scrollable) */}
+          {/* LEFT: Tabs + table (scrollable) */}
           <Card>
             <div style={{ height: "100%", display: "flex", flexDirection: "column", minHeight: 0 }}>
-              <SectionTitle title="Top negative aspects" subtitle="Click an aspect to drill down." />
+              <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 10 }}>
+                <SectionTitle
+                  title={reviewsLeftTab === "aspects" ? "Top negative aspects" : "Negative stakeholders"}
+                  subtitle={
+                    reviewsLeftTab === "aspects"
+                      ? "Click an aspect to drill down."
+                      : "Click a stakeholder to drill down."
+                  }
+                />
+                <SegmentTabs
+                  value={reviewsLeftTab}
+                  onChange={setReviewsLeftTab}
+                  options={[
+                    { value: "aspects", label: "Aspects" },
+                    { value: "stakeholders", label: "Stakeholders" },
+                  ]}
+                />
+              </div>
 
               <Stat
                 title="Total reviews in window"
                 value={String(total)}
-                hint="Aspect counts are aggregated from these reviews."
+                hint="Counts and distributions are aggregated from these reviews."
               />
 
               <div style={{ height: 10 }} />
@@ -547,7 +395,53 @@ export default function OverviewPage() {
                   background: "rgba(255,255,255,0.9)",
                 }}
               >
-                {(summary?.top_negative_aspects ?? []).length ? (
+                {reviewsLeftTab === "aspects" ? (
+                  (summary?.top_negative_aspects ?? []).length ? (
+                    <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                      <thead>
+                        <tr>
+                          <th
+                            style={{
+                              ...th,
+                              position: "sticky",
+                              top: 0,
+                              background: "var(--surface)",
+                              zIndex: 1,
+                            }}
+                          >
+                            Aspect
+                          </th>
+                          <th
+                            style={{
+                              ...th,
+                              position: "sticky",
+                              top: 0,
+                              background: "var(--surface)",
+                              zIndex: 1,
+                            }}
+                          >
+                            Count
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(summary?.top_negative_aspects ?? []).map((a) => (
+                          <tr
+                            key={a.aspect}
+                            onClick={() => setAspectFilter(a.aspect)}
+                            className={`row-click ${aspectFilter === a.aspect ? "row-selected" : ""}`}
+                            title="Click to filter review feed"
+                          >
+                            <td style={{ ...td, fontWeight: 800 }}>{a.aspect}</td>
+                            <td style={td}>{a.count}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  ) : (
+                    <div style={{ padding: 12, fontSize: 12, color: "var(--muted)" }}>No aspect data.</div>
+                  )
+                ) : (summary?.stakeholder_negative_counts ?? []).length ? (
                   <table style={{ width: "100%", borderCollapse: "collapse" }}>
                     <thead>
                       <tr>
@@ -560,7 +454,7 @@ export default function OverviewPage() {
                             zIndex: 1,
                           }}
                         >
-                          Aspect
+                          Stakeholder
                         </th>
                         <th
                           style={{
@@ -576,21 +470,21 @@ export default function OverviewPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {(summary?.top_negative_aspects ?? []).map((a) => (
+                      {(summary?.stakeholder_negative_counts ?? []).map((s) => (
                         <tr
-                          key={a.aspect}
-                          onClick={() => setAspectFilter(a.aspect)}
-                          className={`row-click ${aspectFilter === a.aspect ? "row-selected" : ""}`}
+                          key={s.stakeholder}
+                          onClick={() => setStakeholderFilter(s.stakeholder)}
+                          className={`row-click ${stakeholderFilter === s.stakeholder ? "row-selected" : ""}`}
                           title="Click to filter review feed"
                         >
-                          <td style={{ ...td, fontWeight: 800 }}>{a.aspect}</td>
-                          <td style={td}>{a.count}</td>
+                          <td style={{ ...td, fontWeight: 800 }}>{s.stakeholder}</td>
+                          <td style={td}>{s.count}</td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
                 ) : (
-                  <div style={{ padding: 12, fontSize: 12, color: "var(--muted)" }}>No aspect data.</div>
+                  <div style={{ padding: 12, fontSize: 12, color: "var(--muted)" }}>No stakeholder data.</div>
                 )}
               </div>
             </div>
@@ -631,6 +525,54 @@ export default function OverviewPage() {
           </div>
         </div>
       </Card>
+    </div>
+  );
+}
+
+/** ---------- Small UI helpers ---------- */
+
+function SegmentTabs<T extends string>({
+  value,
+  onChange,
+  options,
+}: {
+  value: T;
+  onChange: (v: T) => void;
+  options: Array<{ value: T; label: string }>;
+}) {
+  return (
+    <div
+      style={{
+        display: "inline-flex",
+        borderRadius: 999,
+        padding: 4,
+        border: "1px solid rgba(0,0,0,0.10)",
+        background: "rgba(255,255,255,0.75)",
+        gap: 4,
+        alignSelf: "flex-start",
+      }}
+    >
+      {options.map((o) => {
+        const active = o.value === value;
+        return (
+          <button
+            key={o.value}
+            onClick={() => onChange(o.value)}
+            style={{
+              border: "none",
+              cursor: "pointer",
+              borderRadius: 999,
+              padding: "6px 10px",
+              fontSize: 12,
+              fontWeight: 900,
+              background: active ? "var(--brand-red)" : "transparent",
+              color: active ? "var(--white)" : "rgba(0,0,0,0.70)",
+            }}
+          >
+            {o.label}
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -731,8 +673,8 @@ function sentimentBadge(sentiment: string) {
   return { bg: "var(--neu-bg)", fg: "var(--neu)" };
 }
 
-/** Minimal “donut-like” snapshot (no extra libraries) */
-function MiniDonut({
+/** Snapshot donut with hover-to-see-percent */
+function InteractiveDonut({
   total,
   positive,
   neutral,
@@ -743,75 +685,157 @@ function MiniDonut({
   neutral: number;
   negative: number;
 }) {
+  const [hover, setHover] = React.useState<null | "Positive" | "Negative" | "Neutral">(null);
+
   const safeTotal = Math.max(total, 1);
   const p = positive / safeTotal;
   const n = negative / safeTotal;
   const u = neutral / safeTotal;
 
-  const size = 140;
-  const r = 48;
+  const pct = (v: number) => {
+    if (!total) return 0;
+    return Math.round((v / total) * 100);
+  };
+
+  const size = 132;
+  const r = 46;
   const c = 2 * Math.PI * r;
 
   const pLen = c * p;
   const nLen = c * n;
   const uLen = c * u;
 
-  return (
-    <div style={{ display: "flex", gap: 14, alignItems: "center" }}>
-      <svg width={size} height={size} viewBox="0 0 140 140">
-        <g transform="translate(70,70)">
-          <circle r={r} fill="none" stroke="rgba(0,0,0,0.06)" strokeWidth="14" />
-          <circle
-            r={r}
-            fill="none"
-            stroke="var(--ok)"
-            strokeWidth="14"
-            strokeDasharray={`${pLen} ${c - pLen}`}
-            strokeDashoffset="0"
-            transform="rotate(-90)"
-          />
-          <circle
-            r={r}
-            fill="none"
-            stroke="var(--neg)"
-            strokeWidth="14"
-            strokeDasharray={`${nLen} ${c - nLen}`}
-            strokeDashoffset={-pLen}
-            transform="rotate(-90)"
-          />
-          <circle
-            r={r}
-            fill="none"
-            stroke="var(--neu)"
-            strokeWidth="14"
-            strokeDasharray={`${uLen} ${c - uLen}`}
-            strokeDashoffset={-(pLen + nLen)}
-            transform="rotate(-90)"
-          />
-          <text x="0" y="6" textAnchor="middle" fontSize="18" fontWeight="900" fill="black">
-            {total}
-          </text>
-          <text x="0" y="24" textAnchor="middle" fontSize="11" fontWeight="700" fill="rgba(0,0,0,0.55)">
-            reviews
-          </text>
-        </g>
-      </svg>
+  const hoverValue =
+    hover === "Positive" ? positive : hover === "Negative" ? negative : hover === "Neutral" ? neutral : null;
 
-      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-        <LegendRow label="Positive" value={positive} color="var(--ok)" />
-        <LegendRow label="Negative" value={negative} color="var(--neg)" />
-        <LegendRow label="Neutral" value={neutral} color="var(--neu)" />
+  return (
+    <div style={{ display: "flex", gap: 16, alignItems: "center", justifyContent: "space-between", flexWrap: "wrap" }}>
+      <div style={{ position: "relative", width: size, height: size }}>
+        {/* Tooltip */}
+        {hover ? (
+          <div
+            style={{
+              position: "absolute",
+              top: -10,
+              left: "50%",
+              transform: "translate(-50%, -100%)",
+              border: "1px solid rgba(0,0,0,0.10)",
+              background: "rgba(255,255,255,0.95)",
+              borderRadius: 12,
+              padding: "8px 10px",
+              boxShadow: "0 8px 20px rgba(0,0,0,0.10)",
+              minWidth: 170,
+              pointerEvents: "none",
+              zIndex: 2,
+            }}
+          >
+            <div style={{ fontSize: 12, color: "var(--muted)", fontWeight: 900 }}>Sentiment</div>
+            <div style={{ marginTop: 4, display: "flex", justifyContent: "space-between", gap: 10 }}>
+              <span style={{ fontSize: 12, fontWeight: 900 }}>{hover}</span>
+              <span style={{ fontSize: 12, fontWeight: 900 }}>
+                {hoverValue ?? 0} ({pct(hoverValue ?? 0)}%)
+              </span>
+            </div>
+          </div>
+        ) : null}
+
+        <svg width={size} height={size} viewBox="0 0 140 140" style={{ display: "block" }}>
+          <g transform="translate(70,70)">
+            <circle r={r} fill="none" stroke="rgba(0,0,0,0.06)" strokeWidth="14" />
+
+            {/* Positive */}
+            <circle
+              r={r}
+              fill="none"
+              stroke="var(--ok)"
+              strokeWidth="14"
+              strokeDasharray={`${pLen} ${c - pLen}`}
+              strokeDashoffset="0"
+              transform="rotate(-90)"
+              style={{ cursor: "pointer", pointerEvents: "stroke", opacity: hover && hover !== "Positive" ? 0.35 : 1 }}
+              onMouseEnter={() => setHover("Positive")}
+              onMouseLeave={() => setHover(null)}
+            />
+
+            {/* Negative */}
+            <circle
+              r={r}
+              fill="none"
+              stroke="var(--neg)"
+              strokeWidth="14"
+              strokeDasharray={`${nLen} ${c - nLen}`}
+              strokeDashoffset={-pLen}
+              transform="rotate(-90)"
+              style={{ cursor: "pointer", pointerEvents: "stroke", opacity: hover && hover !== "Negative" ? 0.35 : 1 }}
+              onMouseEnter={() => setHover("Negative")}
+              onMouseLeave={() => setHover(null)}
+            />
+
+            {/* Neutral */}
+            <circle
+              r={r}
+              fill="none"
+              stroke="var(--neu)"
+              strokeWidth="14"
+              strokeDasharray={`${uLen} ${c - uLen}`}
+              strokeDashoffset={-(pLen + nLen)}
+              transform="rotate(-90)"
+              style={{ cursor: "pointer", pointerEvents: "stroke", opacity: hover && hover !== "Neutral" ? 0.35 : 1 }}
+              onMouseEnter={() => setHover("Neutral")}
+              onMouseLeave={() => setHover(null)}
+            />
+
+            <text x="0" y="6" textAnchor="middle" fontSize="18" fontWeight="900" fill="black">
+              {total}
+            </text>
+            <text x="0" y="24" textAnchor="middle" fontSize="11" fontWeight="700" fill="rgba(0,0,0,0.55)">
+              reviews
+            </text>
+          </g>
+        </svg>
+      </div>
+
+      <div style={{ display: "flex", flexDirection: "column", gap: 10, minWidth: 220, flex: "1 1 auto" }}>
+        <LegendRow label="Positive" value={positive} pct={pct(positive)} color="var(--ok)" active={hover === "Positive"} />
+        <LegendRow label="Negative" value={negative} pct={pct(negative)} color="var(--neg)" active={hover === "Negative"} />
+        <LegendRow label="Neutral" value={neutral} pct={pct(neutral)} color="var(--neu)" active={hover === "Neutral"} />
+        <div style={{ fontSize: 12, color: "var(--muted)" }}>
+          {total ? `Sentiment distribution for ${total} enriched reviews.` : "No reviews in this window."}
+        </div>
       </div>
     </div>
   );
 }
 
-function LegendRow({ label, value, color }: { label: string; value: number; color: string }) {
+function LegendRow({
+  label,
+  value,
+  pct,
+  color,
+  active,
+}: {
+  label: string;
+  value: number;
+  pct: number;
+  color: string;
+  active: boolean;
+}) {
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 10,
+        padding: "6px 8px",
+        borderRadius: 12,
+        background: active ? "rgba(0,0,0,0.03)" : "transparent",
+        border: active ? "1px solid rgba(0,0,0,0.08)" : "1px solid transparent",
+      }}
+    >
       <span style={{ width: 10, height: 10, borderRadius: 999, background: color, display: "inline-block" }} />
-      <span style={{ fontSize: 12, color: "var(--muted)", width: 60 }}>{label}</span>
+      <span style={{ fontSize: 12, color: "var(--muted)", width: 70, fontWeight: 900 }}>{label}</span>
       <span style={{ fontSize: 12, fontWeight: 900 }}>{value}</span>
+      <span style={{ fontSize: 12, color: "var(--muted)" }}>({pct}%)</span>
     </div>
   );
 }
@@ -836,11 +860,11 @@ function TrendChart({ series }: { series: Array<{ day: string; total: number; ne
 
   // --- sizing ---
   const width = 980;
-  const height = 380; // taller for readability
-  const padL = 52; // left padding for y-axis labels
+  const height = 380;
+  const padL = 52;
   const padR = 18;
   const padT = 18;
-  const padB = 42; // bottom padding for x-axis labels
+  const padB = 42;
 
   const maxY = Math.max(...series.map((s) => Math.max(s.total, s.negative)), 1);
 
@@ -852,14 +876,12 @@ function TrendChart({ series }: { series: Array<{ day: string; total: number; ne
       .map((s, i) => `${i === 0 ? "M" : "L"} ${x(i).toFixed(1)} ${y(s[key]).toFixed(1)}`)
       .join(" ");
 
-  // nice y ticks (5 lines)
   const yTicks = 5;
   const ticks = Array.from({ length: yTicks }, (_, k) => {
     const t = (k / (yTicks - 1)) * maxY;
     return Math.round(t);
-  }).reverse(); // top to bottom labels
+  }).reverse();
 
-  // show fewer x labels (avoid clutter)
   const maxXLabels = 6;
   const step = Math.max(1, Math.ceil(series.length / maxXLabels));
   const xLabelIdx = new Set<number>();
@@ -868,12 +890,10 @@ function TrendChart({ series }: { series: Array<{ day: string; total: number; ne
   xLabelIdx.add(series.length - 1);
 
   const fmtX = (s: string) => {
-    // ISO date-like? show YYYY-MM-DD
     if (s.length >= 10 && s[4] === "-" && s[7] === "-") return s.slice(0, 10);
     return s;
   };
 
-  // Tooltip: display in top-right corner inside the chart container
   const tooltip = hover
     ? {
         day: fmtX(series[hover.i].day),
@@ -925,18 +945,11 @@ function TrendChart({ series }: { series: Array<{ day: string; total: number; ne
       ) : null}
 
       <svg width="100%" viewBox={`0 0 ${width} ${height}`} style={{ display: "block" }}>
-        {/* grid + y ticks */}
         {ticks.map((tv, idx) => {
           const yy = y(tv);
           return (
             <g key={idx}>
-              <line
-                x1={padL}
-                y1={yy}
-                x2={width - padR}
-                y2={yy}
-                stroke="rgba(0,0,0,0.06)"
-              />
+              <line x1={padL} y1={yy} x2={width - padR} y2={yy} stroke="rgba(0,0,0,0.06)" />
               <text
                 x={padL - 10}
                 y={yy + 4}
@@ -951,15 +964,12 @@ function TrendChart({ series }: { series: Array<{ day: string; total: number; ne
           );
         })}
 
-        {/* axes */}
         <line x1={padL} y1={padT} x2={padL} y2={height - padB} stroke="rgba(0,0,0,0.12)" />
         <line x1={padL} y1={height - padB} x2={width - padR} y2={height - padB} stroke="rgba(0,0,0,0.12)" />
 
-        {/* lines */}
         <path d={pathFor("total")} fill="none" stroke="rgba(0,0,0,0.55)" strokeWidth="2.5" />
         <path d={pathFor("negative")} fill="none" stroke="var(--brand-red)" strokeWidth="2.5" strokeDasharray="5 4" />
 
-        {/* x labels */}
         {series.map((s, i) => {
           if (!xLabelIdx.has(i)) return null;
           return (
@@ -977,7 +987,6 @@ function TrendChart({ series }: { series: Array<{ day: string; total: number; ne
           );
         })}
 
-        {/* hover points */}
         {series.map((s, i) => {
           const xt = x(i);
           const yt = y(s.total);
@@ -985,7 +994,6 @@ function TrendChart({ series }: { series: Array<{ day: string; total: number; ne
 
           return (
             <g key={s.day}>
-              {/* total point */}
               <circle
                 cx={xt}
                 cy={yt}
@@ -999,11 +1007,8 @@ function TrendChart({ series }: { series: Array<{ day: string; total: number; ne
                 cy={yt}
                 r={hover?.i === i && hover.kind === "total" ? 4 : 2.5}
                 fill="rgba(0,0,0,0.55)"
-                opacity={hover?.i === i && hover.kind === "total" ? 1 : 0.8}
-                pointerEvents="none"
               />
 
-              {/* negative point */}
               <circle
                 cx={xt}
                 cy={yn}
@@ -1017,38 +1022,23 @@ function TrendChart({ series }: { series: Array<{ day: string; total: number; ne
                 cy={yn}
                 r={hover?.i === i && hover.kind === "negative" ? 4 : 2.5}
                 fill="var(--brand-red)"
-                opacity={hover?.i === i && hover.kind === "negative" ? 1 : 0.85}
-                pointerEvents="none"
               />
             </g>
           );
         })}
-
-        {/* legend */}
-        <g>
-          <text x={padL} y={padT} fontSize="12" fill="rgba(0,0,0,0.60)" fontWeight="800">
-            Total
-          </text>
-          <text x={padL + 52} y={padT} fontSize="12" fill="var(--brand-red)" fontWeight="900">
-            Negative
-          </text>
-        </g>
       </svg>
     </div>
   );
 }
 
-
-function Skeleton({ h = 12, w = "100%" }: { h?: number; w?: number | string }) {
+function Skeleton({ h, w }: { h: number; w: string }) {
   return (
     <div
       style={{
         height: h,
         width: w,
-        borderRadius: 10,
+        borderRadius: 999,
         background: "linear-gradient(90deg, rgba(0,0,0,0.04), rgba(0,0,0,0.08), rgba(0,0,0,0.04))",
-        backgroundSize: "200% 100%",
-        animation: "shimmer 1.2s infinite",
       }}
     />
   );

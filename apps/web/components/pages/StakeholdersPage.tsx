@@ -294,21 +294,21 @@ export default function StakeholdersPage() {
         </div>
 
         <div style={controlGrid}>
-          <Select
+          <FilterSelect
             label="Vertical"
             value={vertical}
             onChange={(v) => setVertical(v)}
             options={verticalOptions.map((v) => ({ label: v, value: v }))}
           />
 
-          <Select
+          <FilterSelect
             label="Stakeholder"
             value={stakeholder || stakeholderOptions[0]}
             onChange={(v) => setStakeholder(v)}
             options={stakeholderOptions.map((s) => ({ label: s, value: s }))}
           />
 
-          <Select
+          <FilterSelect
             label="Window"
             value={String(days)}
             onChange={(v) => setDays(Number(v))}
@@ -862,11 +862,43 @@ function bucketSeries(items: ReviewsResp["items"], bucket: Bucket) {
   }));
 }
 
+function FilterSelect({
+  label,
+  value,
+  onChange,
+  options,
+}: {
+  label: string;
+  value: string | number;
+  onChange: (v: string) => void;
+  options: Array<{ label: string; value: string | number }>;
+}) {
+  return (
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        gap: 6,
+        minWidth: 220,
+      }}
+    >
+      <div style={{ fontSize: 12, color: "var(--muted)", fontWeight: 800 }}>{label}</div>
+      <select value={value} onChange={(e) => onChange(e.target.value)} style={pillSelect}>
+        {options.map((o) => (
+          <option key={String(o.value)} value={o.value}>
+            {o.label}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
 /** ---------- styles ---------- */
 
 const controlBar: React.CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "1fr 2.2fr",
+  display: "flex",
+  flexWrap: "wrap",
   gap: 12,
   padding: 14,
   borderRadius: 18,
@@ -877,9 +909,11 @@ const controlBar: React.CSSProperties = {
 
 const controlGrid: React.CSSProperties = {
   display: "grid",
-  gridTemplateColumns: "repeat(3, minmax(200px, 1fr))",
+  gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
   gap: 12,
   alignItems: "end",
+  flex: "1 1 520px",
+  minWidth: 260,
 };
 
 const pillSelect: React.CSSProperties = {

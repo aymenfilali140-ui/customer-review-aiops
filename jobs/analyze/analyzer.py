@@ -2,14 +2,13 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from sqlalchemy import select
+import yaml
+from sqlalchemy import or_, select
 from sqlalchemy.dialects.postgresql import insert
 
-import yaml
-
 from apps.api.app.db import SessionLocal, engine
-from apps.api.app.models import Base, ReviewRaw, ReviewEnriched
-from jobs.analyze.extraction_ollama import render_prompt, call_ollama_json
+from apps.api.app.models import Base, ReviewEnriched, ReviewRaw
+from jobs.analyze.extraction_ollama import call_ollama_json, render_prompt
 from jobs.analyze.sentiment_hf import SentimentClassifier
 
 
@@ -19,7 +18,6 @@ def load_vertical_config() -> Dict[str, Any]:
 
 
 def build_aspect_to_stakeholder(cfg: Dict[str, Any], vertical_key: str) -> Dict[str, str]:
-    # Start with global mapping
     aspect_to_team: Dict[str, str] = {}
 
     global_stakeholders = cfg.get("global_stakeholders", {})
@@ -57,33 +55,42 @@ def select_raws(db, limit: int = 50, force: bool = False) -> List[ReviewRaw]:
 
 def upsert_enriched(db, row: Dict[str, Any], force: bool = False) -> bool:
     """
-    - Default: insert if not exists
-    - Force: upsert (update on conflict) to allow re-analysis
+    Upsert into reviews_enriched using (source, source_review_id) as the conflict key.
+
+    - If force=False: update only when model_version or prompt_version differs.
+    - If force=True: always overwrite the enrichment fields on conflict.
     """
     stmt = insert(ReviewEnriched).values(**row)
 
-    if not force:
-        stmt = stmt.on_conflict_do_nothing(index_elements=["source", "source_review_id"])
-        res = db.execute(stmt)
-        return res.rowcount == 1
+    set_updates = {
+        "raw_id": stmt.excluded.raw_id,
+        "vertical": stmt.excluded.vertical,
+        "created_at": stmt.excluded.created_at,
+        "analyzed_at": stmt.excluded.analyzed_at,
+        "overall_sentiment": stmt.excluded.overall_sentiment,
+        "aspects_json": stmt.excluded.aspects_json,
+        "stakeholder_flags_json": stmt.excluded.stakeholder_flags_json,
+        "model_version": stmt.excluded.model_version,
+        "prompt_version": stmt.excluded.prompt_version,
+    }
 
-    # Force mode: update key fields on conflict
-    stmt = stmt.on_conflict_do_update(
-        index_elements=["source", "source_review_id"],
-        set_={
-            "raw_id": stmt.excluded.raw_id,
-            "vertical": stmt.excluded.vertical,
-            "created_at": stmt.excluded.created_at,
-            "analyzed_at": stmt.excluded.analyzed_at,
-            "overall_sentiment": stmt.excluded.overall_sentiment,
-            "aspects_json": stmt.excluded.aspects_json,
-            "stakeholder_flags_json": stmt.excluded.stakeholder_flags_json,
-            "model_version": stmt.excluded.model_version,
-            "prompt_version": stmt.excluded.prompt_version,
-        },
-    )
-    db.execute(stmt)
-    return True
+    if force:
+        upsert_stmt = stmt.on_conflict_do_update(
+            index_elements=["source", "source_review_id"],
+            set_=set_updates,
+        )
+    else:
+        upsert_stmt = stmt.on_conflict_do_update(
+            index_elements=["source", "source_review_id"],
+            set_=set_updates,
+            where=or_(
+                ReviewEnriched.model_version.is_distinct_from(stmt.excluded.model_version),
+                ReviewEnriched.prompt_version.is_distinct_from(stmt.excluded.prompt_version),
+            ),
+        )
+
+    res = db.execute(upsert_stmt)
+    return res.rowcount == 1
 
 
 def main(
@@ -156,7 +163,11 @@ def main(
             extraction["unmapped_issues"] = existing_unmapped + moved_to_unmapped
 
             # Per-aspect sentiment using evidence text
-            evidence_texts = [m.get("evidence", "")[:500] for m in mentioned if (m.get("evidence") or "").strip()]
+            evidence_texts = [
+                m.get("evidence", "")[:500]
+                for m in mentioned
+                if (m.get("evidence") or "").strip()
+            ]
             e_preds = sentiment.predict_labels(evidence_texts)
 
             ei = 0
@@ -182,7 +193,7 @@ def main(
                     sent = "Neutral"
                 flags[team][sent] += 1
 
-            enriched_row = {
+            enriched_row: Dict[str, Any] = {
                 "raw_id": r.id,
                 "source": r.source,
                 "source_review_id": r.source_review_id,
@@ -201,7 +212,10 @@ def main(
 
         db.commit()
 
-    print(f"Analyzed={len(raws)} InsertedOrUpdated={inserted_or_updated} Force={force} PromptVersion={prompt_version}")
+    print(
+        f"Analyzed={len(raws)} InsertedOrUpdated={inserted_or_updated} "
+        f"Force={force} PromptVersion={prompt_version}"
+    )
 
 
 if __name__ == "__main__":
