@@ -25,7 +25,7 @@ def metrics_trend(
         month -> monthly buckets
 
     Response keeps the same shape:
-      series: [{ day: "YYYY-MM-DD", total: int, negative: int }, ...]
+      series: [{ day: "YYYY-MM-DD", total: int, negative: int, positive: int }, ...]
     Where "day" is the bucket start date (UTC).
     """
     now = datetime.now(timezone.utc)
@@ -45,6 +45,12 @@ def metrics_trend(
                         else_=0,
                     )
                 ).label("negative"),
+                func.sum(
+                    case(
+                        (ReviewEnriched.overall_sentiment == "Positive", 1),
+                        else_=0,
+                    )
+                ).label("positive"),
             )
             .filter(ReviewEnriched.vertical == vertical)
             .group_by(bucket_expr)
@@ -62,6 +68,7 @@ def metrics_trend(
             "day": r.bucket.date().isoformat(),
             "total": int(r.total or 0),
             "negative": int(r.negative or 0),
+            "positive": int(r.positive or 0),
         }
         for r in rows
     ]

@@ -14,7 +14,7 @@ type SummaryResp = {
 
 type TrendResp = {
   filters: { vertical: string; days: number; bucket?: string };
-  series: Array<{ day: string; total: number; negative: number }>;
+  series: Array<{ day: string; total: number; negative: number; positive: number }>;
 };
 
 type AspectsResp = {
@@ -142,45 +142,54 @@ export default function OverviewPage() {
       {/* Header row (page title + controls) */}
       <div
         style={{
-          display: "flex",
-          alignItems: "flex-end",
-          justifyContent: "space-between",
-          gap: 16,
-          flexWrap: "wrap",
+          display: "grid",
+          gridTemplateColumns: "repeat(4, minmax(200px, 1fr))",
+          gap: 12,
+          alignItems: "end",
         }}
       >
-        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+        <div style={{ gridColumn: "span 2", display: "flex", flexDirection: "column", gap: 4 }}>
           <div style={{ fontSize: 22, fontWeight: 900, letterSpacing: -0.2 }}>Overview</div>
           <div style={{ fontSize: 12, color: "var(--muted)" }}>
             Review intelligence across verticals — filters drive all KPIs and drilldowns.
           </div>
         </div>
 
-        <Card>
-          <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
-            <Select
-              label="Vertical"
-              value={vertical}
-              onChange={(v) => setVertical(v)}
-              options={verticalOptions.map((v) => ({ label: v, value: v }))}
-            />
-            <Select
-              label="Window"
-              value={String(days)}
-              onChange={(v) => setDays(Number(v))}
-              options={[0, 7, 30, 90, 365].map((d) => ({
-                label: d === 0 ? "All time" : `Last ${d} days`,
-                value: d,
-              }))}
-            />
-            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              {loading ? <span style={{ fontSize: 12, color: "var(--muted)" }}>Loading…</span> : null}
-              {err ? (
-                <span style={{ fontSize: 12, color: "var(--brand-red)", fontWeight: 800 }}>{err}</span>
-              ) : null}
+        <div style={{ gridColumn: "span 2" }}>
+          <Card>
+            <div style={{ display: "flex", alignItems: "center", gap: 14, width: "100%" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 14, flex: 1 }}>
+                <div style={{ flex: 1 }}>
+                  <Select
+                    label="Vertical"
+                    value={vertical}
+                    onChange={(v) => setVertical(v)}
+                    options={verticalOptions.map((v) => ({ label: v, value: v }))}
+                  />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <Select
+                    label="Window"
+                    value={String(days)}
+                    onChange={(v) => setDays(Number(v))}
+                    options={[0, 7, 30, 90, 365].map((d) => ({
+                      label: d === 0 ? "All time" : `Last ${d} days`,
+                      value: d,
+                    }))}
+                  />
+                </div>
+              </div>
+              {(loading || err) && (
+                <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
+                  {loading ? <span style={{ fontSize: 12, color: "var(--muted)" }}>Loading…</span> : null}
+                  {err ? (
+                    <span style={{ fontSize: 12, color: "var(--brand-red)", fontWeight: 800 }}>{err}</span>
+                  ) : null}
+                </div>
+              )}
             </div>
-          </div>
-        </Card>
+          </Card>
+        </div>
       </div>
 
       {/* KPI row (Snapshot replaces Total + Negative KPIs) */}
@@ -211,7 +220,6 @@ export default function OverviewPage() {
         />
       </div>
 
-      {/* Trend (full-width; snapshot removed from here) */}
       <Card>
         <div
           style={{
@@ -222,7 +230,7 @@ export default function OverviewPage() {
             flexWrap: "wrap",
           }}
         >
-          <SectionTitle title="Trend" subtitle="Daily totals vs negative counts (bucketed)." />
+          <SectionTitle title="Trend" subtitle="Daily totals vs positives vs negative counts." />
 
           <div style={{ display: "inline-flex", alignItems: "center", gap: 10 }}>
             <span style={{ fontSize: 12, color: "var(--muted)", fontWeight: 800 }}>Grouping</span>
@@ -231,8 +239,8 @@ export default function OverviewPage() {
               onChange={setBucket}
               options={[
                 //{value: "day", label: "Daily"},
-                {value: "week", label: "Weekly"},
-                {value: "month", label: "Monthly"},
+                { value: "week", label: "Weekly" },
+                { value: "month", label: "Monthly" },
               ]}
             />
           </div>
@@ -299,6 +307,17 @@ export default function OverviewPage() {
                       >
                         Negative
                       </th>
+                      <th
+                        style={{
+                          ...th,
+                          position: "sticky",
+                          top: 0,
+                          background: "var(--surface)",
+                          zIndex: 1,
+                        }}
+                      >
+                        Positive
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
@@ -307,6 +326,7 @@ export default function OverviewPage() {
                         <td style={td}>{row.day}</td>
                         <td style={td}>{row.total}</td>
                         <td style={td}>{row.negative}</td>
+                        <td style={td}>{row.positive}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -347,56 +367,102 @@ export default function OverviewPage() {
           style={{
             height: 680, // fixed size for the whole block
             display: "grid",
-            gridTemplateColumns: "1fr 1.2fr",
+            gridTemplateColumns: "repeat(4, minmax(200px, 1fr))",
             gap: 12,
             alignItems: "stretch",
             minHeight: 0,
           }}
         >
           {/* LEFT: Tabs + table (scrollable) */}
-          <Card>
-            <div style={{ height: "100%", display: "flex", flexDirection: "column", minHeight: 0 }}>
-              <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 10 }}>
-                <SectionTitle
-                  title={reviewsLeftTab === "aspects" ? "Top negative aspects" : "Negative stakeholders"}
-                  subtitle={
-                    reviewsLeftTab === "aspects"
-                      ? "Click an aspect to drill down."
-                      : "Click a stakeholder to drill down."
-                  }
+          <div style={{ gridColumn: "span 2" }}>
+            <Card>
+              <div style={{ height: "100%", display: "flex", flexDirection: "column", minHeight: 0 }}>
+                <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 10 }}>
+                  <SectionTitle
+                    title={reviewsLeftTab === "aspects" ? "Top negative aspects" : "Negative stakeholders"}
+                    subtitle={
+                      reviewsLeftTab === "aspects"
+                        ? "Click an aspect to drill down."
+                        : "Click a stakeholder to drill down."
+                    }
+                  />
+                  <SegmentTabs
+                    value={reviewsLeftTab}
+                    onChange={setReviewsLeftTab}
+                    options={[
+                      { value: "aspects", label: "Aspects" },
+                      { value: "stakeholders", label: "Stakeholders" },
+                    ]}
+                  />
+                </div>
+
+                <Stat
+                  title="Total reviews in window"
+                  value={String(total)}
+                  hint="Counts and distributions are aggregated from these reviews."
                 />
-                <SegmentTabs
-                  value={reviewsLeftTab}
-                  onChange={setReviewsLeftTab}
-                  options={[
-                    { value: "aspects", label: "Aspects" },
-                    { value: "stakeholders", label: "Stakeholders" },
-                  ]}
-                />
-              </div>
 
-              <Stat
-                title="Total reviews in window"
-                value={String(total)}
-                hint="Counts and distributions are aggregated from these reviews."
-              />
+                <div style={{ height: 10 }} />
 
-              <div style={{ height: 10 }} />
-
-              <div
-                style={{
-                  flex: "1 1 auto",
-                  minHeight: 0,
-                  overflowY: "scroll",
-                  overflowX: "auto",
-                  scrollbarGutter: "stable",
-                  border: "1px solid rgba(0,0,0,0.06)",
-                  borderRadius: "var(--r-lg)",
-                  background: "rgba(255,255,255,0.9)",
-                }}
-              >
-                {reviewsLeftTab === "aspects" ? (
-                  (summary?.top_negative_aspects ?? []).length ? (
+                <div
+                  style={{
+                    flex: "1 1 auto",
+                    minHeight: 0,
+                    overflowY: "scroll",
+                    overflowX: "auto",
+                    scrollbarGutter: "stable",
+                    border: "1px solid rgba(0,0,0,0.06)",
+                    borderRadius: "var(--r-lg)",
+                    background: "rgba(255,255,255,0.9)",
+                  }}
+                >
+                  {reviewsLeftTab === "aspects" ? (
+                    (summary?.top_negative_aspects ?? []).length ? (
+                      <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                        <thead>
+                          <tr>
+                            <th
+                              style={{
+                                ...th,
+                                position: "sticky",
+                                top: 0,
+                                background: "var(--surface)",
+                                zIndex: 1,
+                              }}
+                            >
+                              Aspect
+                            </th>
+                            <th
+                              style={{
+                                ...th,
+                                position: "sticky",
+                                top: 0,
+                                background: "var(--surface)",
+                                zIndex: 1,
+                              }}
+                            >
+                              Count
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {(summary?.top_negative_aspects ?? []).map((a) => (
+                            <tr
+                              key={a.aspect}
+                              onClick={() => setAspectFilter(a.aspect)}
+                              className={`row-click ${aspectFilter === a.aspect ? "row-selected" : ""}`}
+                              title="Click to filter review feed"
+                            >
+                              <td style={{ ...td, fontWeight: 800 }}>{a.aspect}</td>
+                              <td style={td}>{a.count}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    ) : (
+                      <div style={{ padding: 12, fontSize: 12, color: "var(--muted)" }}>No aspect data.</div>
+                    )
+                  ) : (summary?.stakeholder_negative_counts ?? []).length ? (
                     <table style={{ width: "100%", borderCollapse: "collapse" }}>
                       <thead>
                         <tr>
@@ -409,7 +475,7 @@ export default function OverviewPage() {
                               zIndex: 1,
                             }}
                           >
-                            Aspect
+                            Stakeholder
                           </th>
                           <th
                             style={{
@@ -425,73 +491,29 @@ export default function OverviewPage() {
                         </tr>
                       </thead>
                       <tbody>
-                        {(summary?.top_negative_aspects ?? []).map((a) => (
+                        {(summary?.stakeholder_negative_counts ?? []).map((s) => (
                           <tr
-                            key={a.aspect}
-                            onClick={() => setAspectFilter(a.aspect)}
-                            className={`row-click ${aspectFilter === a.aspect ? "row-selected" : ""}`}
+                            key={s.stakeholder}
+                            onClick={() => setStakeholderFilter(s.stakeholder)}
+                            className={`row-click ${stakeholderFilter === s.stakeholder ? "row-selected" : ""}`}
                             title="Click to filter review feed"
                           >
-                            <td style={{ ...td, fontWeight: 800 }}>{a.aspect}</td>
-                            <td style={td}>{a.count}</td>
+                            <td style={{ ...td, fontWeight: 800 }}>{s.stakeholder}</td>
+                            <td style={td}>{s.count}</td>
                           </tr>
                         ))}
                       </tbody>
                     </table>
                   ) : (
-                    <div style={{ padding: 12, fontSize: 12, color: "var(--muted)" }}>No aspect data.</div>
-                  )
-                ) : (summary?.stakeholder_negative_counts ?? []).length ? (
-                  <table style={{ width: "100%", borderCollapse: "collapse" }}>
-                    <thead>
-                      <tr>
-                        <th
-                          style={{
-                            ...th,
-                            position: "sticky",
-                            top: 0,
-                            background: "var(--surface)",
-                            zIndex: 1,
-                          }}
-                        >
-                          Stakeholder
-                        </th>
-                        <th
-                          style={{
-                            ...th,
-                            position: "sticky",
-                            top: 0,
-                            background: "var(--surface)",
-                            zIndex: 1,
-                          }}
-                        >
-                          Count
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {(summary?.stakeholder_negative_counts ?? []).map((s) => (
-                        <tr
-                          key={s.stakeholder}
-                          onClick={() => setStakeholderFilter(s.stakeholder)}
-                          className={`row-click ${stakeholderFilter === s.stakeholder ? "row-selected" : ""}`}
-                          title="Click to filter review feed"
-                        >
-                          <td style={{ ...td, fontWeight: 800 }}>{s.stakeholder}</td>
-                          <td style={td}>{s.count}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                ) : (
-                  <div style={{ padding: 12, fontSize: 12, color: "var(--muted)" }}>No stakeholder data.</div>
-                )}
+                    <div style={{ padding: 12, fontSize: 12, color: "var(--muted)" }}>No stakeholder data.</div>
+                  )}
+                </div>
               </div>
-            </div>
-          </Card>
+            </Card>
+          </div>
 
           {/* RIGHT: review feed (scrollable) */}
-          <div style={{ height: "100%", minHeight: 0, overflowY: "scroll", scrollbarGutter: "stable", paddingRight: 2 }}>
+          <div style={{ gridColumn: "span 2", height: "100%", minHeight: 0, overflowY: "scroll", scrollbarGutter: "stable", paddingRight: 2 }}>
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
               {loading && !reviews ? (
                 <>
@@ -648,8 +670,8 @@ function ReviewCard({ r }: { r: ReviewsResp["items"][0] }) {
                         m.sentiment === "Negative"
                           ? "var(--brand-red)"
                           : m.sentiment === "Positive"
-                          ? "var(--ok)"
-                          : "var(--muted)",
+                            ? "var(--ok)"
+                            : "var(--muted)",
                     }}
                   >
                     {m.sentiment}
@@ -841,12 +863,12 @@ function LegendRow({
 }
 
 /** Chart: totals vs negative (simple, brand-aligned) */
-function TrendChart({ series }: { series: Array<{ day: string; total: number; negative: number }> }) {
+function TrendChart({ series }: { series: Array<{ day: string; total: number; negative: number; positive: number }> }) {
   const [hover, setHover] = React.useState<null | {
     i: number;
     x: number;
     y: number;
-    kind: "total" | "negative";
+    kind: "total" | "negative" | "positive";
   }>(null);
 
   if (!series.length) return <div style={{ fontSize: 12, color: "var(--muted)" }}>No chart data.</div>;
@@ -866,14 +888,14 @@ function TrendChart({ series }: { series: Array<{ day: string; total: number; ne
   const padT = 18;
   const padB = 42;
 
-  const maxY = Math.max(...series.map((s) => Math.max(s.total, s.negative)), 1);
+  const maxY = Math.max(...series.map((s) => Math.max(s.total ?? 0, s.negative ?? 0, s.positive ?? 0)), 1);
 
   const x = (i: number) => padL + (i * (width - padL - padR)) / (series.length - 1);
-  const y = (v: number) => height - padB - (v * (height - padT - padB)) / maxY;
+  const y = (v: number) => height - padB - ((v ?? 0) * (height - padT - padB)) / maxY;
 
-  const pathFor = (key: "total" | "negative") =>
+  const pathFor = (key: "total" | "negative" | "positive") =>
     series
-      .map((s, i) => `${i === 0 ? "M" : "L"} ${x(i).toFixed(1)} ${y(s[key]).toFixed(1)}`)
+      .map((s, i) => `${i === 0 ? "M" : "L"} ${x(i).toFixed(1)} ${y(s[key] ?? 0).toFixed(1)}`)
       .join(" ");
 
   const yTicks = 5;
@@ -896,11 +918,12 @@ function TrendChart({ series }: { series: Array<{ day: string; total: number; ne
 
   const tooltip = hover
     ? {
-        day: fmtX(series[hover.i].day),
-        total: series[hover.i].total,
-        negative: series[hover.i].negative,
-        kind: hover.kind,
-      }
+      day: fmtX(series[hover.i].day),
+      total: series[hover.i].total,
+      negative: series[hover.i].negative,
+      positive: series[hover.i].positive,
+      kind: hover.kind,
+    }
     : null;
 
   return (
@@ -938,6 +961,10 @@ function TrendChart({ series }: { series: Array<{ day: string; total: number; ne
             <span style={{ fontSize: 12, fontWeight: 900, color: "var(--brand-red)" }}>Negative</span>
             <span style={{ fontSize: 12, fontWeight: 900, color: "var(--brand-red)" }}>{tooltip.negative}</span>
           </div>
+          <div style={{ marginTop: 4, display: "flex", justifyContent: "space-between", gap: 10 }}>
+            <span style={{ fontSize: 12, fontWeight: 900, color: "var(--ok)" }}>Positive</span>
+            <span style={{ fontSize: 12, fontWeight: 900, color: "var(--ok)" }}>{tooltip.positive}</span>
+          </div>
           <div style={{ marginTop: 6, fontSize: 11, color: "var(--muted)" }}>
             Hovering: <strong>{tooltip.kind}</strong>
           </div>
@@ -969,6 +996,7 @@ function TrendChart({ series }: { series: Array<{ day: string; total: number; ne
 
         <path d={pathFor("total")} fill="none" stroke="rgba(0,0,0,0.55)" strokeWidth="2.5" />
         <path d={pathFor("negative")} fill="none" stroke="var(--brand-red)" strokeWidth="2.5" strokeDasharray="5 4" />
+        <path d={pathFor("positive")} fill="none" stroke="var(--ok)" strokeWidth="2.5" />
 
         {series.map((s, i) => {
           if (!xLabelIdx.has(i)) return null;
@@ -991,6 +1019,7 @@ function TrendChart({ series }: { series: Array<{ day: string; total: number; ne
           const xt = x(i);
           const yt = y(s.total);
           const yn = y(s.negative);
+          const yp = y(s.positive);
 
           return (
             <g key={s.day}>
@@ -1022,6 +1051,21 @@ function TrendChart({ series }: { series: Array<{ day: string; total: number; ne
                 cy={yn}
                 r={hover?.i === i && hover.kind === "negative" ? 4 : 2.5}
                 fill="var(--brand-red)"
+              />
+
+              <circle
+                cx={xt}
+                cy={yp}
+                r={6}
+                fill="transparent"
+                style={{ cursor: "pointer" }}
+                onMouseEnter={() => setHover({ i, x: xt, y: yp, kind: "positive" })}
+              />
+              <circle
+                cx={xt}
+                cy={yp}
+                r={hover?.i === i && hover.kind === "positive" ? 4 : 2.5}
+                fill="var(--ok)"
               />
             </g>
           );

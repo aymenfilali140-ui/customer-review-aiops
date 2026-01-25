@@ -120,6 +120,7 @@ export function Select({
           background: "var(--surface)",
           padding: "8px 12px",
           outline: "none",
+          width: "100%",
         }}
       >
         {options.map((o) => (

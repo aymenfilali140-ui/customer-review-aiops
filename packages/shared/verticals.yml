@@ -1,119 +1,119 @@
 global_aspects:
-  - timeliness
-  - order_completeness
-  - driver_behavior
-  - customer_support
-  - refund_handling
-  - app_experience
+  - Timeliness
+  - Order_Completeness
+  - Driver_Behavior
+  - Customer_Support
+  - Refund_Handling
+  - App_Experience
 
 stakeholders_catalog:
-  operations: {}
-  product: {}
-  commercial: {}
-  marketing: {}
-  finance: {}
-  customer_support: {}
+  Operations: {}
+  Product: {}
+  Commercial: {}
+  Marketing: {}
+  Finance: {}
+  Customer_Support: {}
 
 global_stakeholders:
-  operations: [timeliness, order_completeness, driver_behavior]
-  customer_support: [customer_support, refund_handling]
-  product: [app_experience]
+  Operations: [Timeliness, Order_Completeness, Driver_Behavior]
+  Customer_Support: [Customer_Support, Refund_Handling]
+  Product: [App_Experience]
 
 verticals:
   food:
     display_name: "Food"
     aspects:
-      - food_quality
-      - food_temperature
-      - packaging_spillage
-      - preparation_time
-      - order_customization_accuracy
+      - Food_Quality
+      - Food_Temperature
+      - Packaging_Spillage
+      - Preparation_Time
+      - Order_Customization_Accuracy
     stakeholders:
-      operations: [timeliness, order_completeness, driver_behavior]
-      product: [app_experience, order_customization_accuracy]
-      commercial: [food_quality]
-      customer_support: [customer_support, refund_handling]
+      Operations: [Timeliness, Order_Completeness, Driver_Behavior]
+      Product: [App_Experience, Order_Customization_Accuracy]
+      Commercial: [Food_Quality]
+      Customer_Support: [Customer_Support, Refund_Handling]
 
   groceries:
     display_name: "Groceries"
     aspects:
-      - item_freshness
-      - substitutions
-      - missing_items
-      - expiry_issues
-      - produce_quality
-      - packing_quality
+      - Item_Freshness
+      - Substitutions
+      - Missing_Items
+      - Expiry_Issues
+      - Produce_Quality
+      - Packing_Quality
     stakeholders:
-      operations: [timeliness, order_completeness, driver_behavior]
-      commercial: [substitutions, item_freshness]
-      product: [app_experience, packing_quality]
-      customer_support: [customer_support, refund_handling, missing_items]
+      Operations: [Timeliness, Order_Completeness, Driver_Behavior]
+      Commercial: [Substitutions, Item_Freshness]
+      Product: [App_Experience, Packing_Quality]
+      Customer_Support: [Customer_Support, Refund_Handling, Missing_Items]
 
   market:
     display_name: "Market"
     aspects:
-      - product_quality
-      - wrong_item
-      - damaged_item
-      - authenticity_concern
-      - price_value
-      - packaging_quality
+      - Product_Quality
+      - Wrong_Item
+      - Damaged_Item
+      - Authenticity_Concern
+      - Price_Value
+      - Packaging_Quality
     stakeholders:
-      operations: [timeliness, order_completeness, driver_behavior]
-      commercial: [price_value, product_quality, authenticity_concern]
-      product: [app_experience]
-      customer_support: [customer_support, refund_handling, wrong_item, damaged_item]
+      Operations: [Timeliness, Order_Completeness, Driver_Behavior]
+      Commercial: [Price_Value, Product_Quality, Authenticity_Concern]
+      Product: [App_Experience]
+      Customer_Support: [Customer_Support, Refund_Handling, Wrong_Item, Damaged_Item]
 
   snoonu_laundry:
     display_name: "SLaundry"
     aspects:
-      - cleaning_quality
-      - item_damage
-      - item_missing
-      - stain_removal
-      - turnaround_time
-      - packaging_quality
+      - Cleaning_Quality
+      - Item_Damage
+      - Item_Missing
+      - Stain_Removal
+      - Turnaround_Time
+      - Packaging_Quality
     stakeholders:
-      operations: [timeliness, order_completeness, driver_behavior, turnaround_time]
-      product: [app_experience, cleaning_quality, stain_removal]
-      customer_support: [customer_support, refund_handling, item_damage, item_missing]
+      Operations: [Timeliness, Order_Completeness, Driver_Behavior, Turnaround_Time]
+      Product: [App_Experience, Cleaning_Quality, Stain_Removal]
+      Customer_Support: [Customer_Support, Refund_Handling, Item_Damage, Item_Missing]
 
   snoonu_city:
     display_name: "SCity"
     aspects:
-      - ticket_delivery
-      - validity_issues
-      - event_information_accuracy
-      - redemption_experience
-      - cancellation_policy
+      - Ticket_Delivery
+      - Validity_Issues
+      - Event_Information_Accuracy
+      - Redemption_Experience
+      - Cancellation_Policy
     stakeholders:
-      operations: [timeliness]
-      commercial: [cancellation_policy, validity_issues]
-      product: [app_experience, redemption_experience, event_information_accuracy]
-      customer_support: [customer_support, refund_handling]
+      Operations: [Timeliness]
+      Commercial: [Cancellation_Policy, Validity_Issues]
+      Product: [App_Experience, Redemption_Experience, Event_Information_Accuracy]
+      Customer_Support: [Customer_Support, Refund_Handling]
 
   snoonu_send:
     display_name: "Snoosend"
     aspects:
-      - pickup_accuracy
-      - dropoff_accuracy
-      - instructions_followed
-      - item_handling_damage
-      - communication
+      - Pickup_Accuracy
+      - Dropoff_Accuracy
+      - Instructions_Followed
+      - Item_Handling_Damage
+      - Communication
     stakeholders:
-      operations: [timeliness, driver_behavior, pickup_accuracy, dropoff_accuracy, instructions_followed]
-      product: [app_experience, communication]
-      customer_support: [customer_support, refund_handling, item_handling_damage]
+      Operations: [Timeliness, Driver_Behavior, Pickup_Accuracy, Dropoff_Accuracy, Instructions_Followed]
+      Product: [App_Experience, Communication]
+      Customer_Support: [Customer_Support, Refund_Handling, Item_Handling_Damage]
 
   car_services:
     display_name: "My Car"
     aspects:
-      - appointment_timing
-      - service_quality
-      - pricing_transparency
-      - staff_behavior
+      - Appointment_Timing
+      - Service_Quality
+      - Pricing_Transparency
+      - Staff_Behavior
     stakeholders:
-      operations: [appointment_timing]
-      commercial: [pricing_transparency]
-      product: [app_experience]
-      customer_support: [customer_support, refund_handling]
+      Operations: [Appointment_Timing]
+      Commercial: [Pricing_Transparency]
+      Product: [App_Experience]
+      Customer_Support: [Customer_Support, Refund_Handling]

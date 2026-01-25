@@ -265,7 +265,7 @@ export default function StakeholdersPage() {
 
       {/* Pronounced full-width control bar (alignment fixed: 3 selects in one row) */}
       <div style={controlBar}>
-        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 4, flex: "1 1 320px", minWidth: 260 }}>
           <div style={{ fontSize: 12, fontWeight: 900, letterSpacing: 0.2 }}>Filters</div>
           <div style={{ fontSize: 12, color: "var(--muted)" }}>
             Choose the vertical, then select a stakeholder and time window.
