@@ -127,8 +127,8 @@ export default function OverviewPage() {
   const posCount = summary?.sentiment_distribution?.Positive ?? 0;
   const neuCount = summary?.sentiment_distribution?.Neutral ?? 0;
 
-  const topNegAspect = summary?.top_negative_aspects?.[0]?.aspect ?? "-";
-  const topNegStakeholder = summary?.stakeholder_negative_counts?.[0]?.stakeholder ?? "-";
+  const topNegAspect = (summary?.top_negative_aspects ?? []).slice(0, 3);
+  const topNegStakeholder = (summary?.stakeholder_negative_counts ?? []).slice(0, 3);
 
   const drilldownActive = Boolean(aspectFilter || stakeholderFilter);
 
@@ -211,12 +211,18 @@ export default function OverviewPage() {
           </Card>
         </div>
 
-        <Stat title="Top Negative Aspect" value={topNegAspect} hint="Click an aspect below to drill down to examples." />
+        <Top3KPI
+          title="Top Negative Aspects"
+          hint="Top 3 by negative mentions in this window."
+          items={topNegAspect.map((x) => ({ label: x.aspect, value: x.count }))}
+          emptyLabel="No aspect data."
+        />
 
-        <Stat
-          title="Top Negative Stakeholder"
-          value={topNegStakeholder}
-          hint="Click a stakeholder below to filter the review feed."
+        <Top3KPI
+          title="Top Negative Stakeholders"
+          hint="Top 3 by negative mentions in this window."
+          items={topNegStakeholder.map((x) => ({ label: x.stakeholder, value: x.count }))}
+          emptyLabel="No stakeholder data."
         />
       </div>
 
@@ -230,7 +236,7 @@ export default function OverviewPage() {
             flexWrap: "wrap",
           }}
         >
-          <SectionTitle title="Trend" subtitle="Daily totals vs positives vs negative counts." />
+          <SectionTitle title="Trend" subtitle="Daily total vs positive vs negative counts." />
 
           <div style={{ display: "inline-flex", alignItems: "center", gap: 10 }}>
             <span style={{ fontSize: 12, color: "var(--muted)", fontWeight: 800 }}>Grouping</span>
@@ -365,7 +371,7 @@ export default function OverviewPage() {
 
         <div
           style={{
-            height: 680, // fixed size for the whole block
+            height: 610, // fixed size for the whole block
             display: "grid",
             gridTemplateColumns: "repeat(4, minmax(200px, 1fr))",
             gap: 12,
@@ -596,6 +602,108 @@ function SegmentTabs<T extends string>({
         );
       })}
     </div>
+  );
+}
+
+function Top3KPI({
+  title,
+  hint,
+  items,
+  emptyLabel,
+}: {
+  title: string;
+  hint?: string;
+  items: Array<{ label: string; value: number }>;
+  emptyLabel?: string;
+}) {
+  return (
+    <Card>
+      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          <div style={{ fontSize: 12, fontWeight: 900, color: "rgba(0,0,0,0.70)" }}>{title}</div>
+          {hint ? <div style={{ fontSize: 12, color: "var(--muted)" }}>{hint}</div> : null}
+        </div>
+
+        {items.length ? (
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: 0,
+              borderRadius: 14,
+              border: "1px solid rgba(0,0,0,0.06)",
+              overflow: "hidden",
+              background: "transparent",
+            }}
+          >
+            {items.map((it, i) => (
+              <div
+                key={`${it.label}-${i}`}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: 12,
+                  padding: "10px 12px",
+                  background: "transparent",
+                  borderTop: i === 0 ? "none" : "1px solid rgba(0,0,0,0.06)",
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
+                  {/* rank chip */}
+                  <span
+                    style={{
+                      width: 22,
+                      height: 22,
+                      borderRadius: 999,
+                      display: "inline-flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      fontSize: 12,
+                      fontWeight: 900,
+                      border: "1px solid rgba(0,0,0,0.12)",
+                      background: "transparent",
+                      color: "rgba(0,0,0,0.70)",
+                      flexShrink: 0,
+                    }}
+                  >
+                    {i + 1}
+                  </span>
+
+                  {/* label */}
+                  <span
+                    style={{
+                      fontSize: 13,
+                      fontWeight: 900,
+                      whiteSpace: "nowrap",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                    }}
+                    title={it.label}
+                  >
+                    {it.label}
+                  </span>
+                </div>
+
+                {/* score */}
+                <span
+                  style={{
+                    fontSize: 12,
+                    fontWeight: 900,
+                    color: "rgba(0,0,0,0.55)",
+                    fontVariantNumeric: "tabular-nums",
+                  }}
+                >
+                  {it.value}
+                </span>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div style={{ fontSize: 12, color: "var(--muted)" }}>{emptyLabel ?? "No data."}</div>
+        )}
+      </div>
+    </Card>
   );
 }
 
